@@ -5,6 +5,7 @@ use std::fs;
 const SCALE: u32 = 10_000;
 
 /// Public inputs for the human index calculation
+#[repr(C)]
 #[derive(Serialize, Deserialize, Debug)]
 pub struct HumanIndexPublicInputs {
     pub w1: u32, // Weight 1 in fixed-point (e.g., 0.15 * 10000 = 1500)
@@ -15,6 +16,7 @@ pub struct HumanIndexPublicInputs {
 }
 
 /// All public values that are committed to the proof and can be verified
+#[repr(C)]
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PublicValues {
     pub inputs: HumanIndexPublicInputs,

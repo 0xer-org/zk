@@ -1,7 +1,7 @@
 #![no_main]
 
 pico_sdk::entrypoint!(main);
-use fibonacci_lib::{calculate_human_index, HumanIndexPublicInputs, PublicValues, VerificationResults};
+use human_index_lib::{calculate_human_index, HumanIndexPublicInputs, PublicValues, VerificationResults};
 use pico_sdk::io::{commit, read_as};
 
 pub fn main() {
