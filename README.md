@@ -78,7 +78,8 @@ This compiles the guest program to a RISC-V ELF binary at `app/elf/riscv32im-pic
 From the project root, run the prover:
 
 ```bash
-cargo run --release --manifest-path prover/Cargo.toml
+cd ../prover
+RUST_LOG=info cargo run --release
 ```
 
 This will:

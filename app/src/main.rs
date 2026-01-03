@@ -1,7 +1,7 @@
 #![no_main]
 
 pico_sdk::entrypoint!(main);
-use fibonacci_lib::{calculate_human_index, HumanIndexPublicInputs, VerificationResults};
+use fibonacci_lib::{calculate_human_index, HumanIndexPublicInputs, PublicValues, VerificationResults};
 use pico_sdk::io::{commit, read_as};
 
 pub fn main() {
@@ -34,7 +34,10 @@ pub fn main() {
     // Compute the human index
     let computed_output = calculate_human_index(&verification_results, &public_inputs);
 
-    // Commit the public inputs and computed output to the proof
-    commit(&public_inputs);
-    commit(&computed_output);
+    // Commit all public values as a single struct to the proof
+    let public_values = PublicValues {
+        inputs: public_inputs,
+        computed_output,
+    };
+    commit(&public_values);
 }

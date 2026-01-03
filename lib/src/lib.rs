@@ -14,6 +14,13 @@ pub struct HumanIndexPublicInputs {
     pub expected_output: u32, // Expected human index result
 }
 
+/// All public values that are committed to the proof and can be verified
+#[derive(Serialize, Deserialize, Debug)]
+pub struct PublicValues {
+    pub inputs: HumanIndexPublicInputs,
+    pub computed_output: u32,
+}
+
 /// Private inputs (verification results)
 #[derive(Serialize, Deserialize, Debug)]
 pub struct VerificationResults {
