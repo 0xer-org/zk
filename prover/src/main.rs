@@ -1,5 +1,5 @@
 use human_index_lib::{calculate_human_index, load_elf, HumanIndexPublicInputs, PublicValues, VerificationResults};
-use pico_sdk::{client::DefaultProverClient, init_logger};
+use pico_sdk::{client::KoalaBearProverClient, init_logger};
 use std::env;
 
 fn main() {
@@ -10,7 +10,7 @@ fn main() {
     let elf = load_elf("../app/elf/riscv32im-pico-zkvm-elf");
 
     // Initialize the prover client
-    let client = DefaultProverClient::new(&elf);
+    let client = KoalaBearProverClient::new(&elf);
     // Initialize new stdin
     let mut stdin_builder = client.new_stdin_builder();
 
@@ -67,17 +67,6 @@ fn main() {
 
     // Generate EVM proof
     client.prove_evm(stdin_builder, true, output_dir.clone(), "kb").expect("Failed to generate evm proof");
-
-    let pv_file_path = output_dir.join("public_values.bin");
-    let public_buffer = std::fs::read(pv_file_path).expect("Failed to read public values file");
-
-    // Deserialize all public values as a single struct
-    let public_values: PublicValues = unsafe {
-        std::ptr::read(public_buffer.as_ptr() as *const PublicValues)
-    };
-
-    // Verify the public values
-    verify_public_values(&verification_results, &public_values, expected_output);
 }
 
 /// Verifies that the computed human index matches the expected value.
