@@ -1,0 +1,18 @@
+{
+  "name": "pico-verifier-scripts",
+  "version": "1.0.0",
+  "description": "Scripts to verify Pico proofs on Sepolia",
+  "type": "module",
+  "scripts": {
+    "verify": "tsx verify-proof.ts"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "ethers": "^6.13.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

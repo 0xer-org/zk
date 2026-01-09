@@ -15,7 +15,7 @@ contract PicoVerifier is Verifier, IPicoVerifier {
     /// @param publicValues The public values.
     function hashPublicValues(
         bytes calldata publicValues
-    ) public pure returns (bytes32) {
+    ) internal pure returns (bytes32) {
         return sha256(publicValues) & bytes32(uint256((1 << 253) - 1));
     }
 
