@@ -130,6 +130,65 @@ To convert a decimal value to fixed-point:
 fixed_point_value = decimal_value * 10000
 ```
 
+## Smart Contract Deployment
+
+This project includes a Solidity verifier contract that can verify proofs on-chain.
+
+### Prerequisites for Deployment
+
+1. Install Foundry:
+```bash
+curl -L https://foundry.paradigm.xyz | bash
+foundryup
+```
+
+2. Install Foundry dependencies:
+```bash
+forge install foundry-rs/forge-std --no-git
+```
+
+### Deployment Setup
+
+1. Copy the example environment file:
+```bash
+cp .env.example .env
+```
+
+2. Edit `.env` and add your configuration:
+   - `PRIVATE_KEY`: Your wallet's private key (with 0x prefix)
+   - Network-specific RPC URLs as needed
+   - `ETHERSCAN_API_KEY`: (Optional) For contract verification
+
+3. Make the deployment script executable:
+```bash
+chmod +x deploy.sh
+```
+
+### Deploy the Contract
+
+Deploy to Sepolia testnet:
+```bash
+./deploy.sh sepolia
+```
+
+Deploy to Mainnet:
+```bash
+./deploy.sh mainnet
+```
+
+The script will:
+- Deploy the PicoVerifier contract
+- Automatically verify the contract on the block explorer
+- Save deployment information in the broadcast folder
+- Display the deployed contract address
+
+### Deployment Output
+
+After successful deployment, you'll find:
+- Deployment details in `broadcast/Deploy.s.sol/<network>/run-latest.json`
+- Contract address and transaction info in the console output
+- Verified contract on the block explorer (if verification succeeded)
+
 ## References
 
 - [Pico Documentation](https://pico-docs.brevis.network/)

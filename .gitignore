@@ -2,3 +2,12 @@
 .todo
 .claude
 */CLAUDE.md
+
+# Foundry
+out/
+cache/
+broadcast/
+lib/
+
+# Environment
+.env

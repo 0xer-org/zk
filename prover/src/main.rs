@@ -68,35 +68,3 @@ fn main() {
     // Generate EVM proof
     client.prove_evm(stdin_builder, true, output_dir.clone(), "kb").expect("Failed to generate evm proof");
 }
-
-/// Verifies that the computed human index matches the expected value.
-fn verify_public_values(
-    verification_results: &VerificationResults,
-    public_values: &PublicValues,
-    expected_output: u32,
-) {
-    println!("=== Human Index ZKP Verification ===");
-    println!("\nPublic Inputs:");
-    println!("  W1: {} (0.15)", public_values.inputs.w1);
-    println!("  W2: {} (0.2)", public_values.inputs.w2);
-    println!("  W3: {} (0.25)", public_values.inputs.w3);
-    println!("  W4: {} (0.4)", public_values.inputs.w4);
-    println!("  Expected Output: {}", public_values.inputs.expected_output);
-
-    println!("\nPrivate Inputs (for verification only):");
-    println!("  Recaptcha Score: {} (0.75)", verification_results.recaptcha_score);
-    println!("  SMS Verified: {}", verification_results.sms_verified);
-    println!("  Bio Verified: {}", verification_results.bio_verified);
-
-    println!("\nComputed Output: {}", public_values.computed_output);
-    println!("Expected Output: {}", expected_output);
-
-    // Verify that the computed output matches the expected output
-    assert_eq!(
-        public_values.computed_output, expected_output,
-        "Mismatch: computed output {} != expected output {}",
-        public_values.computed_output, expected_output
-    );
-
-    println!("\n✓ Verification successful! The proof is valid.");
-}
