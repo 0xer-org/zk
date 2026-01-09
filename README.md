@@ -6,7 +6,7 @@ A complete zero-knowledge proof system for calculating and verifying a human ver
 
 This project implements a full ZKP pipeline that:
 1. **Generates proofs** of correct human index calculation without revealing private verification data
-2. **Deploys a Solidity verifier** contract to Ethereum networks
+2. **Deploys a Solidity verifier** contract to Ethereum and BSC networks
 3. **Verifies proofs on-chain** using the deployed contract
 
 ### Formula
@@ -37,15 +37,17 @@ humanIndex = floor((W1 + W2 * recaptchaScore + W3 * smsVerified + W4 * bioVerifi
 │   └── src/lib.rs            # Data structures and calculation function
 ├── prover/                   # Host program (generates proofs)
 │   └── src/main.rs           # Prover client and verification
-├── contracts/                # Solidity contracts
-│   └── src/
-│       └── PicoVerifier.sol  # On-chain proof verifier
-├── script/                   # Foundry deployment scripts
-│   └── Deploy.s.sol          # Contract deployment script
+├── contracts/                # Smart contract project
+│   ├── src/                  # Solidity contracts
+│   │   ├── PicoVerifier.sol  # On-chain proof verifier
+│   │   ├── IPicoVerifier.sol # Verifier interface
+│   │   └── Groth16Verifier.sol # Groth16 verifier
+│   ├── script/               # Foundry deployment scripts
+│   │   └── Deploy.s.sol      # Contract deployment script
+│   └── foundry.toml          # Foundry configuration
 ├── deploy.sh                 # Deployment automation script
 ├── verify-proof.ts           # TypeScript verification script
-├── package.json              # Node.js dependencies
-└── foundry.toml              # Foundry configuration
+└── package.json              # Node.js dependencies
 ```
 
 ## How It Works
@@ -93,13 +95,7 @@ Install dependencies:
 npm install
 ```
 
-### 4. RPC Access (for deployment and verification)
-You'll need RPC URLs for the networks you want to deploy to:
-- [Alchemy](https://www.alchemy.com/)
-- [Infura](https://infura.io/)
-- Or use [public endpoints](https://chainlist.org/)
-
-### 5. Environment Configuration
+### 4. Environment Configuration
 Copy the example environment file:
 ```bash
 cp .env.example .env
@@ -107,9 +103,14 @@ cp .env.example .env
 
 Edit `.env` and configure:
 - `PRIVATE_KEY`: Your wallet's private key (with 0x prefix) - for deployment
-- `SEPOLIA_RPC_URL`: Sepolia testnet RPC URL - for deployment and verification
-- `MAINNET_RPC_URL`: Mainnet RPC URL (optional) - for mainnet deployment
-- `ETHERSCAN_API_KEY`: (Optional) For contract verification on block explorer
+- RPC URLs for networks you want to use:
+  - `SEPOLIA_RPC_URL`: Ethereum Sepolia testnet
+  - `MAINNET_RPC_URL`: Ethereum Mainnet
+  - `BSC_TESTNET_RPC_URL`: BSC Testnet
+  - `BSC_RPC_URL`: BSC Mainnet
+- `ETHERSCAN_API_KEY`: (Optional) For contract verification (Etherscan v2 supports all networks)
+- Verifier contract addresses (fill in after deployment):
+  - `SEPOLIA_VERIFIER`, `BSC_TESTNET_VERIFIER`, `BSC_VERIFIER`, `MAINNET_VERIFIER`
 
 ## Step 1: Generate ZKP Proof
 
@@ -194,14 +195,16 @@ chmod +x deploy.sh
 
 ### 2.2 Deploy the Contract
 
-Deploy to Sepolia testnet:
-```bash
-./deploy.sh sepolia
-```
+Deploy to your chosen network:
 
-Deploy to Mainnet:
 ```bash
-./deploy.sh mainnet
+# Ethereum networks
+./deploy.sh sepolia       # Ethereum Sepolia testnet
+./deploy.sh mainnet       # Ethereum Mainnet
+
+# BSC networks
+./deploy.sh bsc-testnet   # BSC Testnet
+./deploy.sh bsc           # BSC Mainnet
 ```
 
 The script will:
@@ -213,7 +216,7 @@ The script will:
 ### 2.3 Deployment Output
 
 After successful deployment, you'll find:
-- Deployment details in `broadcast/Deploy.s.sol/<network>/run-latest.json`
+- Deployment details in `contracts/broadcast/Deploy.s.sol/<network>/run-latest.json`
 - Contract address and transaction info in the console output
 - Verified contract on the block explorer (if verification succeeded)
 
@@ -223,34 +226,78 @@ After deploying the verifier contract, you can verify your generated proof on-ch
 
 ### 3.1 Run the Verification Script
 
+By default, the script verifies on BSC Testnet:
+
 ```bash
 npm run verify
 ```
+
+To verify on a different network, set the `NETWORK` environment variable:
+
+```bash
+# BSC Testnet (default)
+npm run verify
+
+# BSC Mainnet
+NETWORK=bsc npm run verify
+
+# Ethereum Sepolia
+NETWORK=sepolia npm run verify
+
+# Ethereum Mainnet
+NETWORK=mainnet npm run verify
+```
+
+Make sure you have:
+1. Deployed the verifier contract to that network
+2. Added the contract address to `.env` (e.g., `BSC_TESTNET_VERIFIER=0x...`)
+3. Configured the corresponding RPC URL in `.env`
 
 ### 3.2 How It Works
 
 The script:
 1. Loads proof data from `target/pico_out/inputs.json` (generated in Step 1)
-2. Connects to the blockchain via your configured RPC URL
-3. Calls `verifyPicoProof()` on the deployed PicoVerifier contract
-4. Reports whether the verification succeeded or failed
+2. Reads the network from `NETWORK` environment variable (defaults to `bsc-testnet`)
+3. Connects to the blockchain via your configured RPC URL
+4. Calls `verifyPicoProof()` on the deployed PicoVerifier contract
+5. Reports whether the verification succeeded or failed
 
 Since `verifyPicoProof()` is a view function, no gas is required and no wallet is needed.
 
-### 3.3 Complete Workflow Example
+### 3.3 Complete Workflow Examples
 
-Here's the complete workflow from start to finish:
+#### BSC Testnet (Default)
 
 ```bash
 # Step 1: Generate proof
 cd app && cargo pico build && cd ..
 RUST_LOG=info cargo run --release --manifest-path prover/Cargo.toml
 
-# Step 2: Deploy verifier (one-time setup)
+# Step 2: Deploy verifier to BSC Testnet (one-time setup)
+./deploy.sh bsc-testnet
+
+# Step 3: Add contract address to .env
+# BSC_TESTNET_VERIFIER=0x... (from deployment output)
+
+# Step 4: Verify proof on-chain
+npm run verify
+```
+
+#### Ethereum Sepolia
+
+```bash
+# Step 1: Generate proof (same as above)
+cd app && cargo pico build && cd ..
+RUST_LOG=info cargo run --release --manifest-path prover/Cargo.toml
+
+# Step 2: Deploy verifier to Sepolia (one-time setup)
 ./deploy.sh sepolia
 
-# Step 3: Verify proof on-chain
-npm run verify
+# Step 3: Add contract address to .env
+# SEPOLIA_VERIFIER=0x... (from deployment output)
+
+# Step 4: Verify proof on-chain
+NETWORK=sepolia npm run verify
 ```
 
 ## References

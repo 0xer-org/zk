@@ -4,9 +4,9 @@
 */CLAUDE.md
 
 # Foundry
-out/
-cache/
-broadcast/
+contracts/out/
+contracts/cache/
+contracts/broadcast/
 lib/
 
 # Environment

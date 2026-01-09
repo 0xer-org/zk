@@ -16,7 +16,7 @@ NC='\033[0m' # No Color
 if [ -z "$1" ]; then
     echo -e "${RED}Error: Network not specified${NC}"
     echo "Usage: ./deploy.sh <network>"
-    echo "Supported networks: mainnet, sepolia"
+    echo "Supported networks: mainnet, sepolia, bsc, bsc-testnet"
     exit 1
 fi
 
@@ -52,9 +52,17 @@ case $NETWORK in
         RPC_URL=$SEPOLIA_RPC_URL
         EXPLORER="https://sepolia.etherscan.io"
         ;;
+    bsc)
+        RPC_URL=$BSC_RPC_URL
+        EXPLORER="https://bscscan.com"
+        ;;
+    bsc-testnet)
+        RPC_URL=$BSC_TESTNET_RPC_URL
+        EXPLORER="https://testnet.bscscan.com"
+        ;;
     *)
         echo -e "${RED}Error: Unsupported network '$NETWORK'${NC}"
-        echo "Supported networks: mainnet, sepolia"
+        echo "Supported networks: mainnet, sepolia, bsc, bsc-testnet"
         exit 1
         ;;
 esac
@@ -70,6 +78,7 @@ echo "RPC URL: $RPC_URL"
 
 # Deploy the contract
 forge script script/Deploy.s.sol:DeployPicoVerifier \
+    --root contracts \
     --rpc-url $RPC_URL \
     --broadcast \
     --verify \
@@ -78,7 +87,7 @@ forge script script/Deploy.s.sol:DeployPicoVerifier \
 echo -e "${GREEN}Deployment complete!${NC}"
 
 # Extract the deployed address from the broadcast file
-BROADCAST_FILE="broadcast/Deploy.s.sol/$NETWORK/run-latest.json"
+BROADCAST_FILE="contracts/broadcast/Deploy.s.sol/$NETWORK/run-latest.json"
 if [ -f "$BROADCAST_FILE" ]; then
     CONTRACT_ADDRESS=$(jq -r '.transactions[0].contractAddress' "$BROADCAST_FILE")
     echo -e "${GREEN}PicoVerifier deployed to: $CONTRACT_ADDRESS${NC}"

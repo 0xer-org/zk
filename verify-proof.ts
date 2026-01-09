@@ -10,23 +10,36 @@ const PICO_VERIFIER_ABI = [
   "function verifyPicoProof(bytes32 riscvVkey, bytes calldata publicValues, uint256[8] calldata proof) external view"
 ];
 
-// Contract address on Sepolia
-const SEPOLIA_VERIFIER = process.env.SEPOLIA_VERIFIER;
+// Network configuration
+const NETWORK = process.env.NETWORK || 'bsc-testnet';
 
-if (!SEPOLIA_VERIFIER) {
-  console.error('❌ Error: SEPOLIA_VERIFIER not found in .env file');
+// Get verifier address based on network
+const VERIFIER_ADDRESS = process.env[`${NETWORK.toUpperCase().replace(/-/g, '_')}_VERIFIER`];
+
+if (!VERIFIER_ADDRESS) {
+  console.error(`❌ Error: ${NETWORK.toUpperCase().replace(/-/g, '_')}_VERIFIER not found in .env file`);
   console.error('Please copy .env.example to .env and fill in your verifier contract address');
   process.exit(1);
 }
 
-// Sepolia RPC endpoint from environment variable
-const SEPOLIA_RPC_URL = process.env.SEPOLIA_RPC_URL;
+// Get RPC URL based on network
+const RPC_URL = process.env[`${NETWORK.toUpperCase().replace(/-/g, '_')}_RPC_URL`];
 
-if (!SEPOLIA_RPC_URL) {
-  console.error('❌ Error: SEPOLIA_RPC_URL not found in .env file');
+if (!RPC_URL) {
+  console.error(`❌ Error: ${NETWORK.toUpperCase().replace(/-/g, '_')}_RPC_URL not found in .env file`);
   console.error('Please copy .env.example to .env and fill in your RPC URL');
   process.exit(1);
 }
+
+// Network display names
+const NETWORK_NAMES: Record<string, string> = {
+  'mainnet': 'Ethereum Mainnet',
+  'sepolia': 'Ethereum Sepolia',
+  'bsc': 'BSC Mainnet',
+  'bsc-testnet': 'BSC Testnet'
+};
+
+const networkName = NETWORK_NAMES[NETWORK] || NETWORK;
 
 async function main() {
   // Read the inputs from the JSON file
@@ -34,8 +47,8 @@ async function main() {
   const inputsData = JSON.parse(readFileSync(inputsPath, 'utf-8'));
 
   console.log('📄 Loaded proof data from:', inputsPath);
-  console.log('📍 Contract address:', SEPOLIA_VERIFIER);
-  console.log('🔗 Network: Sepolia\n');
+  console.log('📍 Contract address:', VERIFIER_ADDRESS);
+  console.log('🔗 Network:', networkName, `(${NETWORK})\n`);
 
   // Extract data from inputs.json
   const riscvVkey = inputsData.riscvVKey;
@@ -48,12 +61,12 @@ async function main() {
   console.log('  proof:', proof);
   console.log();
 
-  // Connect to Sepolia
-  const provider = new ethers.JsonRpcProvider(SEPOLIA_RPC_URL);
+  // Connect to the specified network
+  const provider = new ethers.JsonRpcProvider(RPC_URL);
 
   // Create contract instance
   const contract = new ethers.Contract(
-    SEPOLIA_VERIFIER as string,
+    VERIFIER_ADDRESS as string,
     PICO_VERIFIER_ABI,
     provider
   );
@@ -65,7 +78,7 @@ async function main() {
     await contract.verifyPicoProof(riscvVkey, publicValues, proof);
 
     console.log('✅ Proof verification SUCCEEDED!');
-    console.log('🎉 Your zero-knowledge proof is valid on Sepolia.');
+    console.log(`🎉 Your zero-knowledge proof is valid on ${networkName}.`);
   } catch (error: any) {
     console.log('❌ Proof verification FAILED!');
     console.error('Error:', error.message);
