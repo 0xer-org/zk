@@ -33,8 +33,10 @@ if [ ! -f .env ]; then
     exit 1
 fi
 
-# Load environment variables
+# Load environment variables and export them
+set -a
 source .env
+set +a
 
 # Check if PRIVATE_KEY is set
 if [ -z "$PRIVATE_KEY" ]; then
@@ -76,13 +78,19 @@ fi
 echo -e "${GREEN}Deploying PicoVerifier to $NETWORK...${NC}"
 echo "RPC URL: $RPC_URL"
 
+# Change to contracts directory
+cd contracts
+
 # Deploy the contract
+# Note: PRIVATE_KEY is already in the environment from 'source .env' above
 forge script script/Deploy.s.sol:DeployPicoVerifier \
-    --root contracts \
     --rpc-url $RPC_URL \
     --broadcast \
     --verify \
     -vvvv
+
+# Return to original directory
+cd ..
 
 echo -e "${GREEN}Deployment complete!${NC}"
 

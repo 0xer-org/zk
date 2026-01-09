@@ -5,9 +5,10 @@ A complete zero-knowledge proof system for calculating and verifying a human ver
 ## Overview
 
 This project implements a full ZKP pipeline that:
-1. **Generates proofs** of correct human index calculation without revealing private verification data
-2. **Deploys a Solidity verifier** contract to Ethereum and BSC networks
-3. **Verifies proofs on-chain** using the deployed contract
+1. **Compiles the ZKP circuit** (one-time setup)
+2. **Deploys a Solidity verifier** contract to Ethereum and BSC networks (one-time setup)
+3. **Generates proofs** of correct human index calculation without revealing private verification data (repeatable)
+4. **Verifies proofs on-chain** using the deployed contract (repeatable)
 
 ### Formula
 
@@ -112,41 +113,78 @@ Edit `.env` and configure:
 - Verifier contract addresses (fill in after deployment):
   - `SEPOLIA_VERIFIER`, `BSC_TESTNET_VERIFIER`, `BSC_VERIFIER`, `MAINNET_VERIFIER`
 
-## Step 1: Generate ZKP Proof
+## One-Time Setup
 
-### 1.1 Build the Guest Program
+These steps only need to be performed once when setting up the project or when you modify the circuit logic.
+
+### Step 1: Build the Guest Program (Circuit Compilation)
 
 From the `app/` directory, build the ZKP program:
 
 ```bash
 cd app
 cargo pico build
+cd ..
 ```
 
 This compiles the guest program to a RISC-V ELF binary at `app/elf/riscv32im-pico-zkvm-elf`.
 
-### 1.2 Build and Run the Prover
+**Note**: You only need to rebuild the guest program if you modify the circuit logic in `app/src/main.rs`. For different input values, you don't need to rebuild.
 
-From the project root, run the prover:
+### Step 2: Deploy Verifier Contract
+
+Deploy the Solidity verifier contract to verify proofs on-chain. You only need to deploy once per network.
+
+#### 2.1 Make Deployment Script Executable
 
 ```bash
-cd ../prover
-RUST_LOG=info cargo run --release
+chmod +x deploy.sh
 ```
 
-This will:
-1. Load the compiled guest program
-2. Set up the input data
-3. Generate a ZKP proof
-4. Verify the proof locally
-5. Save proof data to `target/pico_out/inputs.json`
-6. Display the results
+#### 2.2 Deploy the Contract
 
-### 1.3 Customizing Inputs
+Deploy to your chosen network:
 
-Edit `prover/src/main.rs` to modify the test inputs:
+```bash
+# Ethereum networks
+./deploy.sh mainnet       # Ethereum Mainnet
+./deploy.sh sepolia       # Ethereum Sepolia testnet
 
-#### Private Inputs (lines 16-22)
+# BSC networks
+./deploy.sh bsc           # BSC Mainnet
+./deploy.sh bsc-testnet   # BSC Testnet
+```
+
+The script will:
+- Deploy the PicoVerifier contract
+- Automatically verify the contract on the block explorer
+- Save deployment information in the broadcast folder
+- Display the deployed contract address
+
+#### 2.3 Deployment Output
+
+After successful deployment, you'll find:
+- Deployment details in `contracts/broadcast/Deploy.s.sol/<network>/run-latest.json`
+- Contract address and transaction info in the console output
+- Verified contract on the block explorer (if verification succeeded)
+
+**Important**: Save the deployed contract address to your `.env` file:
+```bash
+# Add to .env
+BSC_TESTNET_VERIFIER=0x... # Replace with actual address
+```
+
+---
+
+## Generating and Verifying Proofs
+
+After completing the one-time setup, you can generate and verify proofs with different input values. **These steps can be repeated as many times as needed using the same deployed verifier contract.**
+
+### Step 3: Customize Input Values
+
+Edit `prover/src/main.rs` to modify the verification inputs for your proof:
+
+#### Private Inputs
 
 ```rust
 // recaptcha_score: 0.75 in fixed-point = 7500
@@ -157,7 +195,7 @@ let sms_verified = 1u32;
 let bio_verified = 1u32;
 ```
 
-#### Public Inputs (lines 30-37)
+#### Public Inputs
 
 ```rust
 // W1 = 0.15 -> 1500
@@ -183,48 +221,30 @@ To convert a decimal value to fixed-point:
 fixed_point_value = decimal_value * 10000
 ```
 
-## Step 2: Deploy Verifier Contract
+### Step 4: Generate Proof
 
-Once you've generated a proof, you can deploy the Solidity verifier contract to verify proofs on-chain.
-
-### 2.1 Make Deployment Script Executable
+Run the prover to generate a ZKP proof with your input values:
 
 ```bash
-chmod +x deploy.sh
+cd prover
+RUST_LOG=info cargo run --release
 ```
 
-### 2.2 Deploy the Contract
+This will:
+1. Load the compiled guest program (from Step 1 of One-Time Setup)
+2. Use the input data you configured in Step 3
+3. Generate a ZKP proof
+4. Verify the proof locally
+5. Save proof data to `target/pico_out/inputs.json`
+6. Display the computation results
 
-Deploy to your chosen network:
+**Note**: You don't need to rebuild the guest program unless you modified the circuit logic.
 
-```bash
-# Ethereum networks
-./deploy.sh sepolia       # Ethereum Sepolia testnet
-./deploy.sh mainnet       # Ethereum Mainnet
+### Step 5: Verify Proof On-Chain
 
-# BSC networks
-./deploy.sh bsc-testnet   # BSC Testnet
-./deploy.sh bsc           # BSC Mainnet
-```
+After generating a proof, verify it on-chain using the deployed verifier contract.
 
-The script will:
-- Deploy the PicoVerifier contract
-- Automatically verify the contract on the block explorer
-- Save deployment information in the broadcast folder
-- Display the deployed contract address
-
-### 2.3 Deployment Output
-
-After successful deployment, you'll find:
-- Deployment details in `contracts/broadcast/Deploy.s.sol/<network>/run-latest.json`
-- Contract address and transaction info in the console output
-- Verified contract on the block explorer (if verification succeeded)
-
-## Step 3: Verify Proof On-Chain
-
-After deploying the verifier contract, you can verify your generated proof on-chain.
-
-### 3.1 Run the Verification Script
+#### 5.1 Run the Verification Script
 
 By default, the script verifies on BSC Testnet:
 
@@ -249,14 +269,14 @@ NETWORK=mainnet npm run verify
 ```
 
 Make sure you have:
-1. Deployed the verifier contract to that network
+1. Deployed the verifier contract to that network (Step 2)
 2. Added the contract address to `.env` (e.g., `BSC_TESTNET_VERIFIER=0x...`)
 3. Configured the corresponding RPC URL in `.env`
 
-### 3.2 How It Works
+#### 5.2 How It Works
 
 The script:
-1. Loads proof data from `target/pico_out/inputs.json` (generated in Step 1)
+1. Loads proof data from `target/pico_out/inputs.json` (generated in Step 4)
 2. Reads the network from `NETWORK` environment variable (defaults to `bsc-testnet`)
 3. Connects to the blockchain via your configured RPC URL
 4. Calls `verifyPicoProof()` on the deployed PicoVerifier contract
@@ -264,39 +284,27 @@ The script:
 
 Since `verifyPicoProof()` is a view function, no gas is required and no wallet is needed.
 
-### 3.3 Complete Workflow Examples
+---
 
-#### BSC Testnet (Default)
+## Complete Workflow Examples
 
-```bash
-# Step 1: Generate proof
-cd app && cargo pico build && cd ..
-RUST_LOG=info cargo run --release --manifest-path prover/Cargo.toml
-
-# Step 2: Deploy verifier to BSC Testnet (one-time setup)
-./deploy.sh bsc-testnet
-
-# Step 3: Add contract address to .env
-# BSC_TESTNET_VERIFIER=0x... (from deployment output)
-
-# Step 4: Verify proof on-chain
-npm run verify
-```
-
-#### Ethereum Sepolia
+### Ethereum Sepolia
 
 ```bash
-# Step 1: Generate proof (same as above)
+# === ONE-TIME SETUP ===
+# Step 1: Build the circuit (if not already done)
 cd app && cargo pico build && cd ..
-RUST_LOG=info cargo run --release --manifest-path prover/Cargo.toml
 
-# Step 2: Deploy verifier to Sepolia (one-time setup)
+# Step 2: Deploy verifier to Sepolia
 ./deploy.sh sepolia
+# Save the contract address to .env: SEPOLIA_VERIFIER=0x...
 
-# Step 3: Add contract address to .env
-# SEPOLIA_VERIFIER=0x... (from deployment output)
+# === REPEATED OPERATIONS ===
+# Step 3: Edit input values in prover/src/main.rs
+# Step 4: Generate proof
+cd prover && RUST_LOG=info cargo run --release && cd ..
 
-# Step 4: Verify proof on-chain
+# Step 5: Verify proof on-chain
 NETWORK=sepolia npm run verify
 ```
 
