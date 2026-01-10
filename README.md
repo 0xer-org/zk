@@ -6,10 +6,11 @@ A complete zero-knowledge proof system for calculating and verifying a human ver
 
 This project implements a full ZKP pipeline that:
 1. **Compiles the ZKP circuit** (one-time setup)
-2. **Customizes input values** (optional, for both setup and repeated operations)
-3. **Generates an proof** to create the verifier contract (required due to SDK limitation)
-4. **Deploys a Solidity verifier** contract to Ethereum and BSC networks (one-time setup)
-5. **Verifies proofs on-chain** using the deployed contract
+2. **Generates the verifier contract** directly from the circuit (one-time setup)
+3. **Deploys a Solidity verifier** contract to Ethereum and BSC networks (one-time setup)
+4. **Customizes input values** (optional, for proof generation)
+5. **Generates proofs** of correct human index calculation without revealing private verification data (repeatable)
+6. **Verifies proofs on-chain** using the deployed contract (repeatable)
 
 ### Formula
 
@@ -32,10 +33,17 @@ humanIndex = floor((W1 + W2 * recaptchaScore + W3 * smsVerified + W4 * bioVerifi
 
 Before getting started, ensure you have the following installed:
 
-### 1. Pico zkVM
+### 1. Docker (for verifier generation and proof generation)
+Docker is required for:
+- Generating the `Groth16Verifier.sol` contract (Step 3)
+- Generating proofs (Step 6)
+
+Install Docker from [docker.com](https://www.docker.com/get-started)
+
+### 2. Pico zkVM
 Follow the [Pico installation instructions](https://pico-docs.brevis.network/getting-started/installation.html)
 
-### 2. Foundry (for smart contract deployment)
+### 3. Foundry (for smart contract deployment)
 
 Install Foundry:
 ```bash
@@ -48,7 +56,7 @@ Install Foundry dependencies:
 forge install foundry-rs/forge-std --no-git
 ```
 
-### 3. Node.js (for on-chain verification)
+### 4. Node.js (for on-chain verification)
 Node.js v18 or later is recommended.
 
 Install dependencies:
@@ -56,7 +64,7 @@ Install dependencies:
 npm install
 ```
 
-### 4. Environment Configuration
+### 5. Environment Configuration
 Copy the example environment file:
 ```bash
 cp .env.example .env
@@ -90,16 +98,87 @@ This compiles the guest program to a RISC-V ELF binary at `app/elf/riscv32im-pic
 
 **Note**: You only need to rebuild the guest program if you modify the circuit logic in `app/src/main.rs`. For different input values, you don't need to rebuild.
 
-You can use the `gen-app-id` command to obtain the application ID:
+### Step 2: Generate Application ID
+
+Generate the application ID from your compiled ELF binary. This ID uniquely identifies your circuit and corresponds to the `riscvVkey` parameter in the smart contract:
 
 ```bash
 cd prover
 cargo run --bin gen-app-id -- --elf ../app/elf/riscv32im-pico-zkvm-elf
 ```
 
-### Step 2: Customize Input Values (Optional)
+This will output your `app_id`, which you'll need for the next step. For this project, the app_id is:
+```
+0x000b1cc7dd74154f7e00097b8bf7dc33719c4f8530e917d52358e4ce4ec21de4
+```
 
-Before generating the initial proof, you can customize the input values in `prover/src/main.rs`:
+### Step 3: Generate Groth16Verifier Contract
+
+You can generate the `Groth16Verifier.sol` contract directly using the Pico Gnark CLI Docker image, **without needing to generate a proof first**. This approach avoids the SDK limitation mentioned in [pico#93](https://github.com/brevis-network/pico/issues/93).
+
+From the project root directory, run:
+
+```bash
+docker run --rm -v $(pwd)/contracts/src:/data brevishub/pico_gnark_cli:1.2 \
+  /pico_gnark_cli \
+  -field 0x000b1cc7dd74154f7e00097b8bf7dc33719c4f8530e917d52358e4ce4ec21de4 \
+  -cmd setup \
+  -sol ./data/Groth16Verifier.sol
+```
+
+This command:
+- Mounts your `contracts/src` directory to `/data` in the container
+- Uses your circuit's `app_id` (from Step 2) as the `-field` parameter
+- Generates `Groth16Verifier.sol` directly in `contracts/src/`
+
+### Step 4: Deploy Verifier Contract
+
+Deploy the Solidity verifier contract to verify proofs on-chain. You only need to deploy once per network.
+
+The `Groth16Verifier.sol` generated in Step 3 is already in `contracts/src/`, so you can proceed directly to deployment.
+
+Navigate to the contracts directory and deploy using Foundry:
+
+```bash
+cd contracts
+
+# Load environment variables from .env file
+set -a
+source ../.env
+set +a
+
+forge script script/Deploy.s.sol:DeployPicoVerifier \
+    --rpc-url $RPC_URL \
+    --broadcast \
+    --verify \
+    -vvvv
+```
+
+**Note**: Replace `$RPC_URL` with the appropriate RPC URL environment variable for your target network:
+- `$SEPOLIA_RPC_URL` for Ethereum Sepolia
+- `$MAINNET_RPC_URL` for Ethereum Mainnet
+- `$BSC_TESTNET_RPC_URL` for BSC Testnet
+- `$BSC_RPC_URL` for BSC Mainnet
+
+Make sure your `.env` file contains `PRIVATE_KEY` and the appropriate RPC URL.
+
+**Important**: Save the deployed contract address to your `.env` file:
+```bash
+# Add to .env
+SEPOLIA_VERIFIER=0x...        # For Sepolia deployment
+BSC_TESTNET_VERIFIER=0x...    # For BSC Testnet deployment
+# etc.
+```
+
+---
+
+## Generating and Verifying Proofs
+
+After completing the one-time setup, you can generate and verify proofs with different input values. **These steps can be repeated as many times as needed using the same deployed verifier contract.**
+
+### Step 5: Customize Input Values (Optional)
+
+Edit `prover/src/main.rs` to modify the verification inputs for your proof:
 
 #### Private Inputs
 
@@ -138,9 +217,9 @@ To convert a decimal value to fixed-point:
 fixed_point_value = decimal_value * 10000
 ```
 
-### Step 3: Generate Proof
+### Step 6: Generate Proof
 
-Generate a proof to produce the `Groth16Verifier.sol` file needed for contract deployment:
+Run the prover to generate a ZKP proof with your input values:
 
 ```bash
 cd prover
@@ -149,10 +228,11 @@ RUST_LOG=info cargo run --release --bin prover
 
 This will:
 1. Load the compiled guest program (from Step 1)
-2. Use the input data you configured in Step 2 (or default values)
+2. Use the input data you configured in Step 5 (or default values)
 3. Generate a ZKP proof
-4. **Generate `Groth16Verifier.sol`** at `target/pico_out/Groth16Verifier.sol`
+4. Verify the proof locally
 5. Save proof data to `target/pico_out/inputs.json`
+6. Display the computation results
 
 **Note**: This step creates a Docker container, which requires approximately 32GB of memory and can take around 30 minutes to complete.
 If you encounter the following error, it likely indicates insufficient Docker memory:
@@ -163,71 +243,7 @@ Failed to generate evm proof: the proof file is not exists in /Users/june/Deskto
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 ```
 
-**SDK Limitation**: Currently, the Pico SDK requires generating a proof to obtain the `Groth16Verifier.sol` contract. Ideally, verifier contract generation should be independent of proof generation, but this is a known limitation. For more details, see [pico#93](https://github.com/brevis-network/pico/issues/93).
-
-### Step 4: Deploy Verifier Contract
-
-Deploy the Solidity verifier contract to verify proofs on-chain. You only need to deploy once per network.
-
-#### 4.1 Copy Generated Verifier
-
-Copy the generated Groth16Verifier.sol to the contracts directory:
-
-```bash
-cp target/pico_out/Groth16Verifier.sol contracts/src/Groth16Verifier.sol
-```
-
-This file contains the verification key specific to your circuit.
-
-#### 4.2 Deploy the Contract
-
-Navigate to the contracts directory and deploy using Foundry:
-
-```bash
-cd contracts
-
-# Load environment variables from .env file
-set -a
-source ../.env
-set +a
-
-forge script script/Deploy.s.sol:DeployPicoVerifier \
-    --rpc-url $RPC_URL \
-    --broadcast \
-    --verify \
-    -vvvv
-```
-
-**Note**: Replace `$RPC_URL` with the appropriate RPC URL environment variable for your target network:
-- `$SEPOLIA_RPC_URL` for Ethereum Sepolia
-- `$MAINNET_RPC_URL` for Ethereum Mainnet
-- `$BSC_TESTNET_RPC_URL` for BSC Testnet
-- `$BSC_RPC_URL` for BSC Mainnet
-
-Make sure your `.env` file contains `PRIVATE_KEY` and the appropriate RPC URL.
-
-The deployment will:
-- Deploy the PicoVerifier contract
-- Automatically verify the contract on the block explorer (if `ETHERSCAN_API_KEY` is set)
-- Save deployment information in the broadcast folder
-- Display the deployed contract address
-
-#### 4.3 Deployment Output
-
-After successful deployment, you'll find:
-- Deployment details in `contracts/broadcast/Deploy.s.sol/<chain-id>/run-latest.json`
-- Contract address and transaction info in the console output
-- Verified contract on the block explorer (if verification succeeded)
-
-**Important**: Save the deployed contract address to your `.env` file:
-```bash
-# Add to .env
-SEPOLIA_VERIFIER=0x...        # For Sepolia deployment
-BSC_TESTNET_VERIFIER=0x...    # For BSC Testnet deployment
-# etc.
-```
-
-### Step 5: Verify Proof On-Chain
+### Step 7: Verify Proof On-Chain
 
 After generating a proof, verify it on-chain using the deployed verifier contract.
 
@@ -271,15 +287,18 @@ The script:
 # Step 1: Build the circuit
 cd app && cargo pico build && cd ..
 
-# Step 2: (Optional) Edit input values in prover/src/main.rs
+# Step 2: Generate app ID
+cd prover && cargo run --bin gen-app-id -- --elf ../app/elf/riscv32im-pico-zkvm-elf && cd ..
+# app_id: 0x000b1cc7dd74154f7e00097b8bf7dc33719c4f8530e917d52358e4ce4ec21de4
 
-# Step 3: Generate initial proof (to create Groth16Verifier.sol)
-cd prover && RUST_LOG=info cargo run --release --bin prover && cd ..
+# Step 3: Generate Groth16Verifier.sol directly (no proof needed!)
+docker run --rm -v $(pwd)/contracts/src:/data brevishub/pico_gnark_cli:1.2 \
+  /pico_gnark_cli \
+  -field 0x000b1cc7dd74154f7e00097b8bf7dc33719c4f8530e917d52358e4ce4ec21de4 \
+  -cmd setup \
+  -sol ./data/Groth16Verifier.sol
 
-# Step 4a: Copy generated verifier
-cp target/pico_out/Groth16Verifier.sol contracts/src/Groth16Verifier.sol
-
-# Step 4b: Deploy verifier to Sepolia
+# Step 4: Deploy verifier to Sepolia
 cd contracts && \
 set -a && source ../.env && set +a && \
 forge script script/Deploy.s.sol:DeployPicoVerifier \
@@ -290,7 +309,13 @@ forge script script/Deploy.s.sol:DeployPicoVerifier \
 cd ..
 # Save the contract address to .env: SEPOLIA_VERIFIER=0x...
 
-# Step 5: Verify proof on-chain
+# === REPEATED OPERATIONS ===
+# Step 5: (Optional) Edit input values in prover/src/main.rs
+
+# Step 6: Generate proof
+cd prover && RUST_LOG=info cargo run --release --bin prover && cd ..
+
+# Step 7: Verify proof on-chain
 NETWORK=sepolia npm run verify
 ```
 
