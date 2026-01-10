@@ -51,25 +51,6 @@ humanIndex = floor((W1 + W2 * recaptchaScore + W3 * smsVerified + W4 * bioVerifi
 └── package.json              # Node.js dependencies
 ```
 
-## How It Works
-
-1. **Guest Program** (`app/src/main.rs`):
-   - Reads private verification results from stdin
-   - Reads public weights from stdin
-   - Computes the human index using fixed-point arithmetic
-   - Commits public inputs and output to the proof
-
-2. **Prover** (`prover/src/main.rs`):
-   - Loads the guest program ELF binary
-   - Provides inputs via stdin
-   - Generates a ZKP proof
-   - Extracts and verifies public outputs
-
-3. **Library** (`lib/src/lib.rs`):
-   - Defines data structures for inputs/outputs
-   - Implements the human index calculation
-   - Shared between guest and prover for consistency
-
 ## Prerequisites
 
 Before getting started, ensure you have the following installed:
@@ -124,12 +105,18 @@ From the `app/` directory, build the ZKP program:
 ```bash
 cd app
 cargo pico build
-cd ..
 ```
 
 This compiles the guest program to a RISC-V ELF binary at `app/elf/riscv32im-pico-zkvm-elf`.
 
 **Note**: You only need to rebuild the guest program if you modify the circuit logic in `app/src/main.rs`. For different input values, you don't need to rebuild.
+
+You can use the `gen-app-id` command to obtain the application ID. 
+
+```
+cd prover
+cargo run --bin gen-app-id -- --elf <path_to_elf>
+```
 
 ### Step 2: Deploy Verifier Contract
 
@@ -238,13 +225,20 @@ This will:
 5. Save proof data to `target/pico_out/inputs.json`
 6. Display the computation results
 
+**Note**: This step will create a Docker Container, which requires approximately 32GB of memory and can take around 30 minutes to complete.
+If you encounter the following error, it likely indicates insufficient Docker memory:
+
+```
+thread 'main' panicked at prover/src/main.rs:69:69:
+Failed to generate evm proof: the proof file is not exists in /Users/june/Desktop/zk/prover/../target/pico_out/proof.data. The preceding Docker step likely failed to write outputs (commonly due to insufficient Docker memory). Check the `docker` logs or increase Docker's memory limit.
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+```
+
 **Note**: You don't need to rebuild the guest program unless you modified the circuit logic.
 
 ### Step 5: Verify Proof On-Chain
 
 After generating a proof, verify it on-chain using the deployed verifier contract.
-
-#### 5.1 Run the Verification Script
 
 By default, the script verifies on BSC Testnet:
 
@@ -255,25 +249,18 @@ npm run verify
 To verify on a different network, set the `NETWORK` environment variable:
 
 ```bash
-# BSC Testnet (default)
-npm run verify
-
-# BSC Mainnet
-NETWORK=bsc npm run verify
+# Ethereum Mainnet
+NETWORK=mainnet npm run verify
 
 # Ethereum Sepolia
 NETWORK=sepolia npm run verify
 
-# Ethereum Mainnet
-NETWORK=mainnet npm run verify
+# BSC Mainnet
+NETWORK=bsc npm run verify
+
+# BSC Testnet
+NETWORK=bsc-testnet npm run verify
 ```
-
-Make sure you have:
-1. Deployed the verifier contract to that network (Step 2)
-2. Added the contract address to `.env` (e.g., `BSC_TESTNET_VERIFIER=0x...`)
-3. Configured the corresponding RPC URL in `.env`
-
-#### 5.2 How It Works
 
 The script:
 1. Loads proof data from `target/pico_out/inputs.json` (generated in Step 4)
@@ -281,8 +268,6 @@ The script:
 3. Connects to the blockchain via your configured RPC URL
 4. Calls `verifyPicoProof()` on the deployed PicoVerifier contract
 5. Reports whether the verification succeeded or failed
-
-Since `verifyPicoProof()` is a view function, no gas is required and no wallet is needed.
 
 ---
 

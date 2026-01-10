@@ -1,5 +1,5 @@
-use human_index_lib::{calculate_human_index, load_elf, HumanIndexPublicInputs, PublicValues, VerificationResults};
-use pico_sdk::{client::KoalaBearProverClient, init_logger};
+use human_index_lib::{calculate_human_index, load_elf, HumanIndexPublicInputs, VerificationResults};
+use pico_sdk::{client::DefaultProverClient, init_logger};
 use std::env;
 
 fn main() {
@@ -10,13 +10,13 @@ fn main() {
     let elf = load_elf("../app/elf/riscv32im-pico-zkvm-elf");
 
     // Initialize the prover client
-    let client = KoalaBearProverClient::new(&elf);
+    let client = DefaultProverClient::new(&elf);
     // Initialize new stdin
     let mut stdin_builder = client.new_stdin_builder();
 
     // Set up private inputs (verification results)
     // recaptcha_score: 0.75 in fixed-point = 7500
-    let recaptcha_score = 7500u32;
+    let recaptcha_score = 5500u32; // temporary value for testing
     // sms_verified: true = 1
     let sms_verified = 1u32;
     // bio_verified: true = 1

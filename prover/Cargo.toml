@@ -8,3 +8,10 @@ pico-sdk = { workspace = true }
 bincode = "1.3.3"
 human-index-lib ={ path = "../lib"}
 serde = { workspace = true }
+anyhow = "1.0"
+clap = { version = "4.4", features = ["derive"] }
+dotenvy = "0.15"
+tokio = { version = "1.32", features = ["full"] }
+tracing = "0.1"
+pico-proving-service = { git = "https://github.com/brevis-network/pico-proving-service.git", tag = "pico-v1.1.8" }
+pico-vm = { git = "https://github.com/brevis-network/pico", tag = "v1.1.6" }
