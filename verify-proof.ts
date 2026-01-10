@@ -11,7 +11,7 @@ const PICO_VERIFIER_ABI = [
 ];
 
 // Network configuration
-const NETWORK = process.env.NETWORK || 'bsc-testnet';
+const NETWORK = process.env.NETWORK || 'sepolia';
 
 // Get verifier address based on network
 const VERIFIER_ADDRESS = process.env[`${NETWORK.toUpperCase().replace(/-/g, '_')}_VERIFIER`];
