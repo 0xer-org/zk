@@ -177,7 +177,7 @@ Copy the generated Groth16Verifier.sol to the contracts directory:
 cp target/pico_out/Groth16Verifier.sol contracts/src/Groth16Verifier.sol
 ```
 
-**Note**: This file was generated in Step 3 and contains the verification key specific to your circuit.
+This file contains the verification key specific to your circuit.
 
 #### 4.2 Deploy the Contract
 
