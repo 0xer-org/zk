@@ -19,6 +19,32 @@ cargo run --release --bin prover
 
 Output: Saves proof data to `target/pico_out/inputs.json`.
 
+### Groth16 Trusted Setup Management
+
+The prover **automatically manages Groth16 trusted setup** based on existing setup files:
+
+- **First run or setup files missing**:
+  - Automatically performs a new trusted setup
+  - Generates `target/pico_out/vm_pk` (Proving Key) and `target/pico_out/vm_vk` (Verification Key)
+  - Outputs: `⚙️  Groth16 setup files not found. Running trusted setup...`
+
+- **Subsequent runs**:
+  - Reuses existing `vm_pk` and `vm_vk` files
+  - Maintains consistent Groth16 verification parameters (ALPHA, BETA, GAMMA, DELTA)
+  - Outputs: `✓ Reusing existing Groth16 setup from: ...`
+
+**When to force a new setup:**
+
+If you modify the circuit logic in `app/src/main.rs`, you **must** delete the old setup files:
+
+```bash
+rm ../target/pico_out/vm_pk ../target/pico_out/vm_vk
+cargo run --release --bin prover
+```
+
+This regenerates the `Groth16Verifier.sol` with the new circuit parameters to match your updated circuit. Without this step, proofs may fail verification due to parameter mismatch.
+Remember to also redeploy the new verifier contract and update your `.env` file with the new address after regenerating the setup.
+
 ## Generate App ID
 
 This tool generates the `app_id` from a given ELF file: 
