@@ -1,10 +1,10 @@
 # Build artifacts
 /target
 app/elf/*
-contracts/src/Groth16Verifier.sol
 prover/data/*
-!prover/data/vm_pk
 !prover/data/vm_vk
+!prover/data/constraints.json
+!prover/data/groth16_witness.json
 
 # TODOs
 .todo

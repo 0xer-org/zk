@@ -107,7 +107,7 @@ cd prover
 cargo run --bin gen-app-id -- --elf ../app/elf/riscv32im-pico-zkvm-elf
 ```
 
-This will output your `app_id`, which you'll need for the next step. For this project, the app_id is:
+This will output your `app_id`. For this project, the app_id is:
 ```
 0x000b1cc7dd74154f7e00097b8bf7dc33719c4f8530e917d52358e4ce4ec21de4
 ```
@@ -119,17 +119,16 @@ You can generate the `Groth16Verifier.sol` contract directly using the Pico Gnar
 From the project root directory, run:
 
 ```bash
-docker run --rm -v $(pwd)/contracts/src:/data brevishub/pico_gnark_cli:1.2 \
+docker run --rm -v $(pwd)/prover/data:/data brevishub/pico_gnark_cli:1.2 \
   /pico_gnark_cli \
-  -field 0x000b1cc7dd74154f7e00097b8bf7dc33719c4f8530e917d52358e4ce4ec21de4 \
+  -field "kb" \
   -cmd setup \
-  -sol ./data/Groth16Verifier.sol
+  -sol /data/Groth16Verifier.sol
 ```
 
 This command:
-- Mounts your `contracts/src` directory to `/data` in the container
-- Uses your circuit's `app_id` (from Step 2) as the `-field` parameter
-- Generates `Groth16Verifier.sol` directly in `contracts/src/`
+- Mounts `/prover/data` (where `groth16_witness.json` lives) to `/data` in the container
+- Generates `Groth16Verifier.sol` directly in `/data` (which maps to `/prover/data` on your host)
 
 ### Step 4: Deploy Verifier Contract
 
@@ -292,11 +291,11 @@ cd prover && cargo run --bin gen-app-id -- --elf ../app/elf/riscv32im-pico-zkvm-
 # app_id: 0x000b1cc7dd74154f7e00097b8bf7dc33719c4f8530e917d52358e4ce4ec21de4
 
 # Step 3: Generate Groth16Verifier.sol directly (no proof needed!)
-docker run --rm -v $(pwd)/contracts/src:/data brevishub/pico_gnark_cli:1.2 \
+docker run --rm -v $(pwd)/prover/data:/data brevishub/pico_gnark_cli:1.2 \
   /pico_gnark_cli \
-  -field 0x000b1cc7dd74154f7e00097b8bf7dc33719c4f8530e917d52358e4ce4ec21de4 \
+  -field "kb" \
   -cmd setup \
-  -sol ./data/Groth16Verifier.sol
+  -sol /data/Groth16Verifier.sol
 
 # Step 4: Deploy verifier to Sepolia
 cd contracts && \
@@ -319,7 +318,23 @@ cd prover && RUST_LOG=info cargo run --release --bin prover && cd ..
 NETWORK=sepolia npm run verify
 ```
 
+## Verifying the On-Chain Contract
+
+The deployed verifier contract can be verified against this repository:
+
+1. **Contract Source**: `contracts/src/Groth16Verifier.sol` is committed to this repo
+2. **Verification Key**: `prover/data/vm_vk` is committed (used to generate the contract)
+3. **Circuit Code**: `app/src/main.rs` contains the ZKP circuit logic
+
+### Verification Steps
+1. Clone this repository
+2. Compare `Groth16Verifier.sol` with the deployed contract on Etherscan
+3. Rebuild the circuit and verify ELF matches
+
+### Deployed Contracts
+- Sepolia: 0x... (verified on Etherscan)
+- BSC Testnet: 0x... (verified on BscScan)
+
 ## References
 
 - [Pico Documentation](https://pico-docs.brevis.network/)
-
