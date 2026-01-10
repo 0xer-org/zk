@@ -118,47 +118,69 @@ cd prover
 cargo run --bin gen-app-id -- --elf <path_to_elf>
 ```
 
+For example:
+
+```bash
+cargo run --bin gen-app-id -- --elf ../app/elf/riscv32im-pico-zkvm-elf
+``` 
+
 ### Step 2: Deploy Verifier Contract
 
 Deploy the Solidity verifier contract to verify proofs on-chain. You only need to deploy once per network.
 
-#### 2.1 Make Deployment Script Executable
+#### 2.1 Copy Generated Verifier
+
+First, copy the generated Groth16Verifier.sol to the contracts directory:
 
 ```bash
-chmod +x deploy.sh
+cp target/pico_out/Groth16Verifier.sol contracts/src/Groth16Verifier.sol
 ```
+
+**Note**: This file is generated during the prover compilation step and contains the verification key specific to your circuit.
 
 #### 2.2 Deploy the Contract
 
-Deploy to your chosen network:
+Navigate to the contracts directory and deploy using Foundry:
 
 ```bash
-# Ethereum networks
-./deploy.sh mainnet       # Ethereum Mainnet
-./deploy.sh sepolia       # Ethereum Sepolia testnet
+cd contracts
 
-# BSC networks
-./deploy.sh bsc           # BSC Mainnet
-./deploy.sh bsc-testnet   # BSC Testnet
+forge script script/Deploy.s.sol:DeployPicoVerifier \
+    --rpc-url $RPC_URL \
+    --broadcast \
+    --verify \
+    -vvvv
+
+cd ..
 ```
 
-The script will:
+**Note**: Replace `$RPC_URL` with the appropriate RPC URL environment variable for your target network:
+- `$SEPOLIA_RPC_URL` for Ethereum Sepolia
+- `$MAINNET_RPC_URL` for Ethereum Mainnet
+- `$BSC_TESTNET_RPC_URL` for BSC Testnet
+- `$BSC_RPC_URL` for BSC Mainnet
+
+Make sure your `.env` file contains `PRIVATE_KEY` and the appropriate RPC URL.
+
+The deployment will:
 - Deploy the PicoVerifier contract
-- Automatically verify the contract on the block explorer
+- Automatically verify the contract on the block explorer (if `ETHERSCAN_API_KEY` is set)
 - Save deployment information in the broadcast folder
 - Display the deployed contract address
 
 #### 2.3 Deployment Output
 
 After successful deployment, you'll find:
-- Deployment details in `contracts/broadcast/Deploy.s.sol/<network>/run-latest.json`
+- Deployment details in `contracts/broadcast/Deploy.s.sol/<chain-id>/run-latest.json`
 - Contract address and transaction info in the console output
 - Verified contract on the block explorer (if verification succeeded)
 
 **Important**: Save the deployed contract address to your `.env` file:
 ```bash
 # Add to .env
-BSC_TESTNET_VERIFIER=0x... # Replace with actual address
+SEPOLIA_VERIFIER=0x...        # For Sepolia deployment
+BSC_TESTNET_VERIFIER=0x...    # For BSC Testnet deployment
+# etc.
 ```
 
 ---
@@ -280,8 +302,17 @@ The script:
 # Step 1: Build the circuit (if not already done)
 cd app && cargo pico build && cd ..
 
-# Step 2: Deploy verifier to Sepolia
-./deploy.sh sepolia
+# Step 2a: Copy generated verifier
+cp target/pico_out/Groth16Verifier.sol contracts/src/Groth16Verifier.sol
+
+# Step 2b: Deploy verifier to Sepolia
+cd contracts && \
+forge script script/Deploy.s.sol:DeployPicoVerifier \
+    --rpc-url $SEPOLIA_RPC_URL \
+    --broadcast \
+    --verify \
+    -vvvv && \
+cd ..
 # Save the contract address to .env: SEPOLIA_VERIFIER=0x...
 
 # === REPEATED OPERATIONS ===

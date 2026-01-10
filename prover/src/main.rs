@@ -16,7 +16,7 @@ fn main() {
 
     // Set up private inputs (verification results)
     // recaptcha_score: 0.75 in fixed-point = 7500
-    let recaptcha_score = 5500u32; // temporary value for testing
+    let recaptcha_score = 7500u32;
     // sms_verified: true = 1
     let sms_verified = 1u32;
     // bio_verified: true = 1

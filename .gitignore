@@ -1,5 +1,12 @@
+# Build artifacts
 /target
+app/elf/*
+contracts/src/Groth16Verifier.sol
+
+# TODOs
 .todo
+
+# Claude
 .claude
 */CLAUDE.md
 
