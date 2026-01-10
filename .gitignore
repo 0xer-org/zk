@@ -2,6 +2,9 @@
 /target
 app/elf/*
 contracts/src/Groth16Verifier.sol
+prover/data/*
+!prover/data/vm_pk
+!prover/data/vm_vk
 
 # TODOs
 .todo

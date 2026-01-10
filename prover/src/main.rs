@@ -61,50 +61,15 @@ fn main() {
 
     // Set up output path
     let current_dir = env::current_dir().expect("Failed to get current directory");
-    let output_dir = current_dir.join("../target/pico_out");
+    let output_dir = current_dir.join("data");
     // Create the output directory if it doesn't exist
     std::fs::create_dir_all(&output_dir).expect("Failed to create output directory");
 
-    // Set up data directory for storing setup files
-    let data_dir = current_dir.join("data");
-    std::fs::create_dir_all(&data_dir).expect("Failed to create data directory");
-
     // Check if Groth16 setup files already exist in data directory
-    let data_vm_pk_path = data_dir.join("vm_pk");
-    let data_vm_vk_path = data_dir.join("vm_vk");
-    let need_setup = !data_vm_pk_path.exists() || !data_vm_vk_path.exists();
-
-    if need_setup {
-        println!("⚙️  Groth16 setup files not found in prover/data. Running trusted setup...");
-        println!("   This will generate new verification parameters.");
-    } else {
-        println!("✓ Reusing existing Groth16 setup from prover/data:");
-        println!("  - {}", data_vm_pk_path.display());
-        println!("  - {}", data_vm_vk_path.display());
-
-        // Copy existing setup files to output directory for proving
-        let output_vm_pk_path = output_dir.join("vm_pk");
-        let output_vm_vk_path = output_dir.join("vm_vk");
-        std::fs::copy(&data_vm_pk_path, &output_vm_pk_path)
-            .expect("Failed to copy vm_pk to output directory");
-        std::fs::copy(&data_vm_vk_path, &output_vm_vk_path)
-            .expect("Failed to copy vm_vk to output directory");
-    }
+    let vm_pk_path = output_dir.join("vm_pk");
+    let vm_vk_path = output_dir.join("vm_vk");
+    let need_setup = !vm_pk_path.exists() || !vm_vk_path.exists();
 
     // Generate EVM proof
     client.prove_evm(stdin_builder, need_setup, output_dir.clone(), "kb").expect("Failed to generate evm proof");
-
-    // If setup was performed, save the generated files to data directory
-    if need_setup {
-        let output_vm_pk_path = output_dir.join("vm_pk");
-        let output_vm_vk_path = output_dir.join("vm_vk");
-
-        if output_vm_pk_path.exists() && output_vm_vk_path.exists() {
-            std::fs::copy(&output_vm_pk_path, &data_vm_pk_path)
-                .expect("Failed to save vm_pk to data directory");
-            std::fs::copy(&output_vm_vk_path, &data_vm_vk_path)
-                .expect("Failed to save vm_vk to data directory");
-            println!("✓ Saved setup files to prover/data for future reuse");
-        }
-    }
 }

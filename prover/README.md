@@ -38,7 +38,7 @@ The prover **automatically manages Groth16 trusted setup** based on existing set
 If you modify the circuit logic in `app/src/main.rs`, you **must** delete the old setup files:
 
 ```bash
-rm ../target/pico_out/vm_pk ../target/pico_out/vm_vk
+rm ./data/vm_pk ./data/vm_vk
 cargo run --release --bin prover
 ```
 
