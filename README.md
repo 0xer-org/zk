@@ -320,20 +320,23 @@ NETWORK=sepolia npm run verify
 
 ## Verifying the On-Chain Contract
 
-The deployed verifier contract can be verified against this repository:
+The deployed verifier contract can be verified against this repository to ensure the on-chain contract is bound to the circuit in this repo.
 
-1. **Contract Source**: `contracts/src/Groth16Verifier.sol` is committed to this repo
-2. **Verification Key**: `prover/data/vm_vk` is committed (used to generate the contract)
-3. **Circuit Code**: `app/src/main.rs` contains the ZKP circuit logic
+### What's Committed to This Repository
+- Contract Source: `contracts/src/Groth16Verifier.sol` - the verifier contract code
+- Verification Key: `prover/data/vm_vk` and `prover/data/vm_vk` - used to generate the contract
+- Circuit Code: `app/src/main.rs` - the ZKP circuit logic
 
-### Verification Steps
+### How to Verify
 1. Clone this repository
-2. Compare `Groth16Verifier.sol` with the deployed contract on Etherscan
-3. Rebuild the circuit and verify ELF matches
+2. Follow Step 1 to build the guest program to get the ELF binary
+4. Follow Step 6 to generate a proof
+5. Follow Step 7 to verify the proof on-chain
+
+If the proof verification passes on-chain, it proves that the on-chain Verifier contract is bound to the circuit in this repository.
 
 ### Deployed Contracts
-- Sepolia: 0x... (verified on Etherscan)
-- BSC Testnet: 0x... (verified on BscScan)
+- Sepolia: 0x8b04bc19292DcEf6B9EE3F8037B96A763351a77d (verified on Etherscan)
 
 ## References
 

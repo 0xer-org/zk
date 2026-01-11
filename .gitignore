@@ -3,8 +3,7 @@
 app/elf/*
 prover/data/*
 !prover/data/vm_vk
-!prover/data/constraints.json
-!prover/data/groth16_witness.json
+!prover/data/vm_pk
 
 # TODOs
 .todo
