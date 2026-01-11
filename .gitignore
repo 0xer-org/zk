@@ -5,9 +5,6 @@ prover/data/*
 !prover/data/vm_vk
 !prover/data/vm_pk
 
-# TODOs
-.todo
-
 # Claude
 .claude
 */CLAUDE.md
@@ -24,3 +21,7 @@ lib/
 # Node.js
 node_modules/
 package-lock.json
+
+# TODOs
+Doc
+.todo

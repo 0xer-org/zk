@@ -11,7 +11,22 @@ serde = { workspace = true }
 anyhow = "1.0"
 clap = { version = "4.4", features = ["derive"] }
 dotenvy = "0.15"
-tokio = { version = "1.32", features = ["full"] }
+tokio = { version = "1.32", features = ["full", "signal"] }
 tracing = "0.1"
 pico-proving-service = { git = "https://github.com/brevis-network/pico-proving-service.git", tag = "pico-v1.1.8" }
 pico-vm = { git = "https://github.com/brevis-network/pico", tag = "v1.1.6" }
+
+# Google Cloud Pub/Sub
+google-cloud-pubsub = "0.25"
+google-cloud-googleapis = "0.13"
+
+# Serialization and encoding
+serde_json = "1.0"
+base64 = "0.22"
+
+# Error handling and utilities
+thiserror = "1.0"
+tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
+chrono = "0.4"
+once_cell = "1.19"
+tokio-util = "0.7"

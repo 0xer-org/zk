@@ -6,7 +6,7 @@ const SCALE: u32 = 10_000;
 
 /// Public inputs for the human index calculation
 #[repr(C)]
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct HumanIndexPublicInputs {
     pub w1: u32, // Weight 1 in fixed-point (e.g., 0.15 * 10000 = 1500)
     pub w2: u32, // Weight 2 in fixed-point (e.g., 0.2 * 10000 = 2000)
@@ -24,7 +24,7 @@ pub struct PublicValues {
 }
 
 /// Private inputs (verification results)
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct VerificationResults {
     pub recaptcha_score: u32, // In fixed-point (0 to 10000 for 0.0 to 1.0)
     pub sms_verified: u32,    // 0 or 1

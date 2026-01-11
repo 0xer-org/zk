@@ -1,75 +1,92 @@
-use human_index_lib::{calculate_human_index, load_elf, HumanIndexPublicInputs, VerificationResults};
-use pico_sdk::{client::DefaultProverClient, init_logger};
-use std::env;
+mod config;
+mod error;
+mod prover;
+mod service;
+mod types;
 
-fn main() {
-    // Initialize logger
-    init_logger();
+use config::Config;
+use error::ServiceError;
+use prover::load_and_cache_elf;
+use service::ProverService;
+use tokio::signal;
+use tokio_util::sync::CancellationToken;
+use tracing::{error, info};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-    // Load the ELF file
-    let elf = load_elf("../app/elf/riscv32im-pico-zkvm-elf");
+#[tokio::main]
+async fn main() -> Result<(), ServiceError> {
+    // Load configuration
+    let config = Config::from_env()?;
+    config.validate()?;
 
-    // Initialize the prover client
-    let client = DefaultProverClient::new(&elf);
-    // Initialize new stdin
-    let mut stdin_builder = client.new_stdin_builder();
+    // Initialize logging
+    init_logging(&config);
 
-    // Set up private inputs (verification results)
-    // recaptcha_score: 0.75 in fixed-point = 7500
-    let recaptcha_score = 7500u32;
-    // sms_verified: true = 1
-    let sms_verified = 1u32;
-    // bio_verified: true = 1
-    let bio_verified = 1u32;
+    info!("Starting Pico ZK Prover Service");
+    info!("Configuration loaded successfully");
+    info!("  GCP Project: {}", config.gcp_project_id);
+    info!("  Subscription: {}", config.prover_subscription);
+    info!("  Result Topic: {}", config.result_topic);
+    info!("  Max Concurrent Proofs: {}", config.max_concurrent_proofs);
+    info!("  Proof Timeout: {}s", config.proof_timeout_secs);
+    info!("  ELF Path: {}", config.elf_path);
+    info!("  Output Dir: {}", config.output_dir);
 
-    // Write private inputs to stdin
-    stdin_builder.write(&recaptcha_score);
-    stdin_builder.write(&sms_verified);
-    stdin_builder.write(&bio_verified);
+    // Load and cache ELF file
+    info!("Loading ELF file: {}", config.elf_path);
+    let cached_elf = load_and_cache_elf(&config.elf_path).await?;
+    info!("ELF file loaded and cached successfully");
 
-    // Set up public inputs (weights in fixed-point)
-    // W1 = 0.15 -> 1500
-    let w1 = 1500u32;
-    // W2 = 0.2 -> 2000
-    let w2 = 2000u32;
-    // W3 = 0.25 -> 2500
-    let w3 = 2500u32;
-    // W4 = 0.4 -> 4000
-    let w4 = 4000u32;
+    // Create output directory if it doesn't exist
+    std::fs::create_dir_all(&config.output_dir)
+        .map_err(|e| ServiceError::Io(e))?;
+    info!("Output directory ready: {}", config.output_dir);
 
-    // Calculate expected output locally for verification
-    let verification_results = VerificationResults {
-        recaptcha_score,
-        sms_verified,
-        bio_verified,
-    };
-    let public_inputs_struct = HumanIndexPublicInputs {
-        w1,
-        w2,
-        w3,
-        w4,
-        expected_output: 0, // Will be calculated
-    };
-    let expected_output = calculate_human_index(&verification_results, &public_inputs_struct);
+    // Initialize prover service
+    info!("Initializing Prover Service");
+    let service = ProverService::new(config, cached_elf).await?;
 
-    // Write public inputs to stdin
-    stdin_builder.write(&w1);
-    stdin_builder.write(&w2);
-    stdin_builder.write(&w3);
-    stdin_builder.write(&w4);
-    stdin_builder.write(&expected_output);
+    // Create cancellation token for graceful shutdown
+    let cancellation_token = CancellationToken::new();
+    let shutdown_token = cancellation_token.clone();
 
-    // Set up output path
-    let current_dir = env::current_dir().expect("Failed to get current directory");
-    let output_dir = current_dir.join("data");
-    // Create the output directory if it doesn't exist
-    std::fs::create_dir_all(&output_dir).expect("Failed to create output directory");
+    // Spawn shutdown handler
+    tokio::spawn(async move {
+        signal::ctrl_c()
+            .await
+            .expect("Failed to listen for shutdown signal");
+        info!("Shutdown signal received, stopping service...");
+        shutdown_token.cancel();
+    });
 
-    // Check if Groth16 setup files already exist in data directory
-    let vm_pk_path = output_dir.join("vm_pk");
-    let vm_vk_path = output_dir.join("vm_vk");
-    let need_setup = !vm_pk_path.exists() || !vm_vk_path.exists();
+    // Run service with cancellation token
+    match service.run(cancellation_token).await {
+        Ok(_) => info!("Service stopped normally"),
+        Err(e) => {
+            error!("Service error: {}", e);
+            return Err(e);
+        }
+    }
 
-    // Generate EVM proof
-    client.prove_evm(stdin_builder, need_setup, output_dir.clone(), "kb").expect("Failed to generate evm proof");
+    Ok(())
+}
+
+/// Initialize logging based on configuration
+fn init_logging(config: &Config) {
+    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(&config.log_level));
+
+    if config.json_logging {
+        // JSON logging for production
+        tracing_subscriber::registry()
+            .with(env_filter)
+            .with(tracing_subscriber::fmt::layer().json())
+            .init();
+    } else {
+        // Human-readable logging for development
+        tracing_subscriber::registry()
+            .with(env_filter)
+            .with(tracing_subscriber::fmt::layer())
+            .init();
+    }
 }
