@@ -43,7 +43,7 @@ const networkName = NETWORK_NAMES[NETWORK] || NETWORK;
 
 async function main() {
   // Read the inputs from the JSON file
-  const inputsPath = './target/pico_out/inputs.json';
+  const inputsPath = 'prover/data/inputs.json';
   const inputsData = JSON.parse(readFileSync(inputsPath, 'utf-8'));
 
   console.log('📄 Loaded proof data from:', inputsPath);

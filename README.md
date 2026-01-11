@@ -134,9 +134,13 @@ This command:
 
 Deploy the Solidity verifier contract to verify proofs on-chain. You only need to deploy once per network.
 
-The `Groth16Verifier.sol` generated in Step 3 is already in `contracts/src/`, so you can proceed directly to deployment.
+Copy the generated `Groth16Verifier.sol` to the contracts source directory:
 
-Navigate to the contracts directory and deploy using Foundry:
+```bash
+cp prover/data/Groth16Verifier.sol contracts/src/
+```
+
+Then, navigate to the contracts directory and deploy using Foundry:
 
 ```bash
 cd contracts
@@ -336,7 +340,7 @@ The deployed verifier contract can be verified against this repository to ensure
 If the proof verification passes on-chain, it proves that the on-chain Verifier contract is bound to the circuit in this repository.
 
 ### Deployed Contracts
-- Sepolia: 0x8b04bc19292DcEf6B9EE3F8037B96A763351a77d (verified on Etherscan)
+- Sepolia: 0x6D30a5BE6A1b79Fd3D254b0cC3152f77731c2768 (verified on Etherscan)
 
 ## References
 
