@@ -28,16 +28,18 @@ impl ProverService {
     pub async fn new(config: Config, cached_elf: Arc<CachedElf>) -> Result<Self, ServiceError> {
         info!("Initializing Google Cloud Pub/Sub client");
 
-        // Create Pub/Sub client (uses GOOGLE_APPLICATION_CREDENTIALS and auto-detects project)
+        // Create Pub/Sub client
         let client_config = ClientConfig::default();
 
         let client = Client::new(client_config)
             .await
             .map_err(|e| ServiceError::PubSub(format!("Failed to create Pub/Sub client: {}", e)))?;
 
-        // Get subscription with full path (projects/{project}/subscriptions/{subscription})
-        let subscription_path = format!("projects/{}/subscriptions/{}",
-            config.gcp_project_id, config.prover_subscription);
+        // Get subscription with full path (required for emulator)
+        let subscription_path = format!(
+            "projects/{}/subscriptions/{}",
+            config.gcp_project_id, config.prover_subscription
+        );
         let subscription = client.subscription(&subscription_path);
 
         // Create semaphore for concurrency control

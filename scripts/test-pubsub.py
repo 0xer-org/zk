@@ -48,9 +48,13 @@ def create_topics_and_subscriptions():
 
     try:
         subscriber.create_subscription(
-            request={"name": prover_sub_path, "topic": prover_topic_path}
+            request={
+                "name": prover_sub_path,
+                "topic": prover_topic_path,
+                "ack_deadline_seconds": 600  # Max allowed is 600 seconds (10 min)
+            }
         )
-        print(f"✓ Created subscription: {prover_sub_path}")
+        print(f"✓ Created subscription: {prover_sub_path} (ack_deadline=600s)")
     except Exception as e:
         print(f"Subscription {PROVER_SUBSCRIPTION} may already exist: {e}")
 

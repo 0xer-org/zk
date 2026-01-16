@@ -33,21 +33,7 @@ To stop the emulator:
 
 ## Running Tests
 
-### Quick E2E Test
-
-The simplest way to test:
-
-```bash
-# Terminal 1: Start emulator
-./scripts/start-emulator.sh
-
-# Terminal 2: Run E2E test
-./scripts/run-test.sh e2e
-```
-
 ### Manual Testing (4 Terminals)
-
-For more control over the testing workflow:
 
 **Terminal 1: Start Emulator**
 ```bash
@@ -56,35 +42,25 @@ For more control over the testing workflow:
 
 **Terminal 2: Setup and Listen for Results**
 ```bash
-export $(cat .env.test | xargs)
+export PUBSUB_EMULATOR_HOST=localhost:8085
 python scripts/test-pubsub.py setup
-python scripts/test-pubsub.py listen 120
+python scripts/test-pubsub.py listen forever
 ```
 
 **Terminal 3: Run Prover Service**
 ```bash
-export $(cat .env.test | xargs)
-cd prover && cargo run --release
+cargo run --release --bin prover
 ```
 
 **Terminal 4: Send Test Messages**
 ```bash
-export $(cat .env.test | xargs)
+export PUBSUB_EMULATOR_HOST=localhost:8085
 python scripts/test-pubsub.py publish normal
 ```
 
 ## Test Script Commands
 
-The `run-test.sh` wrapper handles environment setup automatically:
-
-```bash
-./scripts/run-test.sh e2e                # Complete E2E test (listens forever, Ctrl+C to stop)
-./scripts/run-test.sh publish normal     # Publish normal test message
-./scripts/run-test.sh publish boundary   # Publish boundary test message
-./scripts/run-test.sh listen 60          # Listen for 60 seconds
-```
-
-Or use `test-pubsub.py` directly (requires environment variables):
+Use `test-pubsub.py` directly (requires environment variables):
 
 ```bash
 python scripts/test-pubsub.py setup              # Create topics/subscriptions
@@ -108,7 +84,7 @@ python scripts/test-pubsub.py e2e                 # Full E2E test
 
 ## Environment Variables
 
-Set via `.env.test` or manually:
+Set via `.env` or manually:
 
 ```bash
 PUBSUB_EMULATOR_HOST=localhost:8085
@@ -123,7 +99,7 @@ PROOF_TIMEOUT_SECS=300
 
 Load from file:
 ```bash
-export $(cat .env.test | xargs)
+export $(grep -v '^#' .env | xargs)
 ```
 
 ## Expected Results
@@ -159,46 +135,3 @@ export $(cat .env.test | xargs)
   "timestamp": "2024-01-01T12:00:00Z"
 }
 ```
-
-## Troubleshooting
-
-### Emulator Not Starting
-```bash
-# Check if port is in use
-lsof -i :8085
-
-# Kill existing process
-kill $(lsof -t -i:8085)
-```
-
-### Connection Refused
-- Ensure `PUBSUB_EMULATOR_HOST` is set
-- Verify emulator is running: `docker ps | grep pubsub`
-
-### No Messages Received
-- Run setup again: `python scripts/test-pubsub.py setup`
-- Check prover service logs
-- Emulator stores data in memory; restart requires re-running setup
-
-## Files Overview
-
-```
-scripts/
-├── start-emulator.sh      # Start Pub/Sub Emulator (Docker)
-├── stop-emulator.sh       # Stop Pub/Sub Emulator
-├── setup-test-env.sh      # Install Python dependencies
-├── run-test.sh            # Test wrapper with env setup
-├── test-pubsub.py         # Main test script
-├── requirements.txt       # Python dependencies
-└── README.md              # Quick reference
-
-.env.test                  # Test environment config
-```
-
-## Next Steps
-
-After local testing succeeds:
-1. Review [pubsub-setup-guide.md](./pubsub-setup-guide.md) for production setup
-2. Configure GCP Pub/Sub in your project
-3. Set up proper service account permissions
-4. Deploy the prover service
