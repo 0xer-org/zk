@@ -1,0 +1,2 @@
+# Python dependencies for Pub/Sub testing scripts
+google-cloud-pubsub>=2.18.0

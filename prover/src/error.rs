@@ -17,12 +17,6 @@ pub enum ServiceError {
 
     #[error("Configuration error: {0}")]
     Config(String),
-
-    #[error("Timeout error: {0}")]
-    Timeout(String),
-
-    #[error("Shutdown signal received")]
-    Shutdown,
 }
 
 impl ServiceError {
@@ -33,8 +27,6 @@ impl ServiceError {
             ServiceError::Serialization(_) => "SerializationError",
             ServiceError::Io(_) => "IoError",
             ServiceError::Config(_) => "ConfigError",
-            ServiceError::Timeout(_) => "TimeoutError",
-            ServiceError::Shutdown => "ShutdownError",
         }
         .to_string()
     }

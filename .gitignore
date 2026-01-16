@@ -17,11 +17,18 @@ lib/
 
 # Environment
 .env
+.env.test
+.env.local
+
+# Python virtual environment
+.venv/
+venv/
+__pycache__/
+*.pyc
 
 # Node.js
 node_modules/
 package-lock.json
 
 # TODOs
-Doc
 .todo

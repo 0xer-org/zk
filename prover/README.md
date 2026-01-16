@@ -4,46 +4,84 @@
 
 This workspace contains multiple binaries:
 
-- **`prover`** (from `src/main.rs`): Main proof generation tool
-- **`gen-app-id`** (from `src/bin/gen-app-id.rs`): Application ID generator
+- **`prover`** (from `src/main.rs`): Long-running Prover Service that listens for proof requests via Google Cloud Pub/Sub.
+- **`gen-app-id`** (from `src/bin/gen-app-id.rs`): Application ID generator.
 
-## Proof Generation
+## Prover Service
 
-Generates a zero-knowledge proof using the compiled guest binary and inputs defined in `src/main.rs`.
+The Prover Service is a long-running application that subscribes to a Google Cloud Pub/Sub subscription, processes proof generation requests, and publishes the results to a specified topic.
+
+### Configuration
+
+The service is configured via environment variables or a `.env` file:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `GCP_PROJECT_ID` | Google Cloud Project ID | (Required) |
+| `PROVER_SUBSCRIPTION` | Pub/Sub subscription ID for incoming requests | (Required) |
+| `RESULT_TOPIC` | Pub/Sub topic ID for publishing results | (Required) |
+| `MAX_CONCURRENT_PROOFS` | Max concurrent proof generation tasks | `2` |
+| `PROOF_TIMEOUT_SECS` | Timeout for a single proof generation (seconds) | `3600` |
+| `ELF_PATH` | Path to the RISC-V ELF binary | `../app/elf/riscv32im-pico-zkvm-elf` |
+| `OUTPUT_DIR` | Directory for storing proof artifacts | `data` |
+| `LOG_LEVEL` | Logging level (info, debug, trace) | `info` |
 
 ### Usage
 
+1. **Set up environment variables:**
+
+   Create a `.env` file or export variables directly.
+
+   ```bash
+   export GCP_PROJECT_ID=your-project-id
+   export PROVER_SUBSCRIPTION=prover-requests-sub
+   export RESULT_TOPIC=prover-results
+   ```
+
+2. **Run the service:**
+
+   ```bash
+   cargo run --release --bin prover
+   ```
+
+   The service will start, load the ELF file, and begin listening for Pub/Sub messages.
+
+### Local Development (with Emulator)
+
+To run the service against a local Pub/Sub emulator:
+
 ```bash
+export PUBSUB_EMULATOR_HOST=localhost:8085
+export GCP_PROJECT_ID=test-project
+export PROVER_SUBSCRIPTION=prover-requests-sub
+export RESULT_TOPIC=prover-results
+
 cargo run --release --bin prover
 ```
 
-Output: Saves proof data to `target/pico_out/inputs.json`.
-
 ### Groth16 Trusted Setup Management
 
-The prover **automatically manages Groth16 trusted setup** based on existing setup files:
+The service **automatically manages Groth16 trusted setup** based on existing setup files in the `OUTPUT_DIR` (default: `data/`):
 
 - **First run or setup files missing**:
-  - Automatically performs a new trusted setup
-  - Generates `target/pico_out/vm_pk` (Proving Key) and `target/pico_out/vm_vk` (Verification Key)
-  - Outputs: `⚙️  Groth16 setup files not found. Running trusted setup...`
+  - Automatically performs a new trusted setup.
+  - Generates `vm_pk` (Proving Key) and `vm_vk` (Verification Key).
+  - Logs: `Running trusted setup...`
 
 - **Subsequent runs**:
-  - Reuses existing `vm_pk` and `vm_vk` files
-  - Maintains consistent Groth16 verification parameters (ALPHA, BETA, GAMMA, DELTA)
-  - Outputs: `✓ Reusing existing Groth16 setup from: ...`
+  - Reuses existing `vm_pk` and `vm_vk` files.
+  - Logs: `Reusing existing Groth16 setup`
 
 **When to force a new setup:**
 
-If you modify the circuit logic in `app/src/main.rs`, you **must** delete the old setup files:
+If you modify the circuit logic in `app/src/main.rs`, you **must** delete the old setup files before restarting the service:
 
 ```bash
 rm ./data/vm_pk ./data/vm_vk
 cargo run --release --bin prover
 ```
 
-This regenerates the `Groth16Verifier.sol` with the new circuit parameters to match your updated circuit. Without this step, proofs may fail verification due to parameter mismatch.
-Remember to also redeploy the new verifier contract and update your `.env` file with the new address after regenerating the setup.
+This regenerates the keys. Remember to also redeploy the verifier contract and update your configuration if the verification key changes.
 
 ## Generate App ID
 

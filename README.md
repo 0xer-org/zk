@@ -342,6 +342,63 @@ If the proof verification passes on-chain, it proves that the on-chain Verifier 
 ### Deployed Contracts
 - Sepolia: 0x6D30a5BE6A1b79Fd3D254b0cC3152f77731c2768 (verified on Etherscan)
 
+## Testing
+
+### Local Testing with Pub/Sub Emulator
+
+For testing the Pub/Sub-based prover service locally, use the Google Cloud Pub/Sub Emulator running in Docker. Detailed instructions are in [Doc/testing-guide.md](Doc/testing-guide.md).
+
+#### Prerequisites
+- Docker (for Pub/Sub emulator)
+- Python 3.9+ (for test scripts)
+
+#### Quick start:
+
+```bash
+# 1. Install Python dependencies for testing
+./scripts/setup-test-env.sh
+
+# 2. Start the emulator (Docker-based, runs in background)
+./scripts/start-emulator.sh
+
+# 3. Run end-to-end test
+./scripts/run-test.sh e2e
+
+# 4. Stop the emulator when done
+./scripts/stop-emulator.sh
+```
+
+#### Emulator Management:
+```bash
+# Start emulator (runs in Docker background)
+./scripts/start-emulator.sh
+
+# Stop and remove emulator container
+./scripts/stop-emulator.sh
+
+# View emulator logs
+docker logs -f pubsub-emulator
+
+# Check emulator status
+docker ps | grep pubsub-emulator
+```
+
+For more testing options:
+```bash
+# Publish a test message
+./scripts/run-test.sh publish normal
+
+# Listen for results
+./scripts/run-test.sh listen 30
+```
+
+See [Doc/testing-guide.md](Doc/testing-guide.md) for comprehensive testing documentation including:
+- Docker-based Pub/Sub Emulator setup
+- Test message formats and scenarios
+- Running the prover service with the emulator
+- Troubleshooting common issues
+
 ## References
 
 - [Pico Documentation](https://pico-docs.brevis.network/)
+- [Testing Guide](Doc/testing-guide.md) - Local testing with Pub/Sub Emulator
