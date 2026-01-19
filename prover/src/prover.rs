@@ -38,7 +38,7 @@ impl ProofGenerator {
     pub fn generate_proof(
         &self,
         request: ProverRequest,
-    ) -> Result<(ProofData, bool), ServiceError> {
+    ) -> Result<ProofData, ServiceError> {
         // Create request-specific output directory
         let output_dir = self.output_base_dir.join(&request.request_id);
         std::fs::create_dir_all(&output_dir).map_err(|e| {
@@ -66,52 +66,37 @@ impl ProofGenerator {
         stdin_builder.write(&public_inputs.w4);
         stdin_builder.write(&expected_output);
 
-        // Check if Groth16 setup files exist in the base data directory
+        // Copy existing setup files from base data directory to proof directory
         let vm_pk_path = self.output_base_dir.join("vm_pk");
         let vm_vk_path = self.output_base_dir.join("vm_vk");
-        let need_setup = !vm_pk_path.exists() || !vm_vk_path.exists();
 
-        // If setup files don't exist, prove_evm will generate them in the base directory
-        // We need to copy them to the proof-specific directory for Docker access
-        if !need_setup {
-            // Copy existing setup files to proof directory before prove_evm
-            let dest_vm_pk = output_dir.join("vm_pk");
-            let dest_vm_vk = output_dir.join("vm_vk");
-            std::fs::copy(&vm_pk_path, &dest_vm_pk).map_err(|e| {
-                ServiceError::ProofGeneration(format!("Failed to copy vm_pk: {}", e))
-            })?;
-            std::fs::copy(&vm_vk_path, &dest_vm_vk).map_err(|e| {
-                ServiceError::ProofGeneration(format!("Failed to copy vm_vk: {}", e))
-            })?;
+        if !vm_pk_path.exists() || !vm_vk_path.exists() {
+            return Err(ServiceError::ProofGeneration(format!(
+                "Groth16 setup files not found. Expected vm_pk at {} and vm_vk at {}. \
+                Run the setup command first to generate these files.",
+                vm_pk_path.display(),
+                vm_vk_path.display()
+            )));
         }
 
-        // Generate EVM proof
+        let dest_vm_pk = output_dir.join("vm_pk");
+        let dest_vm_vk = output_dir.join("vm_vk");
+        std::fs::copy(&vm_pk_path, &dest_vm_pk).map_err(|e| {
+            ServiceError::ProofGeneration(format!("Failed to copy vm_pk: {}", e))
+        })?;
+        std::fs::copy(&vm_vk_path, &dest_vm_vk).map_err(|e| {
+            ServiceError::ProofGeneration(format!("Failed to copy vm_vk: {}", e))
+        })?;
+
+        // Generate EVM proof (never run trusted setup)
         client
-            .prove_evm(stdin_builder, need_setup, output_dir.clone(), "kb")
+            .prove_evm(stdin_builder, false, output_dir.clone(), "kb")
             .map_err(|e| {
                 ServiceError::ProofGeneration(format!("prove_evm failed: {}", e))
             })?;
 
-        // If setup was performed, copy the generated setup files back to base directory
-        if need_setup {
-            let src_vm_pk = output_dir.join("vm_pk");
-            let src_vm_vk = output_dir.join("vm_vk");
-            if src_vm_pk.exists() {
-                std::fs::copy(&src_vm_pk, &vm_pk_path).map_err(|e| {
-                    ServiceError::ProofGeneration(format!("Failed to save vm_pk to base dir: {}", e))
-                })?;
-            }
-            if src_vm_vk.exists() {
-                std::fs::copy(&src_vm_vk, &vm_vk_path).map_err(|e| {
-                    ServiceError::ProofGeneration(format!("Failed to save vm_vk to base dir: {}", e))
-                })?;
-            }
-        }
-
         // Read the generated proof files
-        let proof_data = self.read_proof_files(&output_dir, expected_output)?;
-
-        Ok((proof_data, need_setup))
+        self.read_proof_files(&output_dir, expected_output)
     }
 
     /// Read and encode proof files to base64

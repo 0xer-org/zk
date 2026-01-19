@@ -70,8 +70,7 @@ The prover can run as a cloud-native microservice using Google Cloud Pub/Sub:
 
 **Run the service:**
 ```bash
-cd prover
-cargo run --release
+cargo run --release --bin prover
 ```
 
 **Note:** Messages are ACKed immediately upon receipt to prevent redelivery during long proof generation. If proof generation fails, the request will NOT be automatically retried. The caller should handle retries based on the error response.
@@ -162,21 +161,7 @@ This compiles the guest program to a RISC-V ELF binary at `app/elf/riscv32im-pic
 
 **Note**: You only need to rebuild the guest program if you modify the circuit logic in `app/src/main.rs`. For different input values, you don't need to rebuild.
 
-### Step 2: Generate Application ID
-
-Generate the application ID from your compiled ELF binary. This ID uniquely identifies your circuit and corresponds to the `riscvVkey` parameter in the smart contract:
-
-```bash
-cd prover
-cargo run --bin gen-app-id -- --elf ../app/elf/riscv32im-pico-zkvm-elf
-```
-
-This will output your `app_id`. For this project, the app_id is:
-```
-0x000b1cc7dd74154f7e00097b8bf7dc33719c4f8530e917d52358e4ce4ec21de4
-```
-
-### Step 3: Generate Groth16Verifier Contract
+### Step 2: Generate Groth16Verifier Contract
 
 You can generate the `Groth16Verifier.sol` contract directly using the Pico Gnark CLI Docker image, **without needing to generate a proof first**. This approach avoids the SDK limitation mentioned in [pico#93](https://github.com/brevis-network/pico/issues/93).
 
@@ -194,7 +179,7 @@ This command:
 - Mounts `/prover/data` (where `groth16_witness.json` lives) to `/data` in the container
 - Generates `Groth16Verifier.sol` directly in `/data` (which maps to `/prover/data` on your host)
 
-### Step 4: Deploy Verifier Contract
+### Step 3: Deploy Verifier Contract
 
 Deploy the Solidity verifier contract to verify proofs on-chain. You only need to deploy once per network.
 
@@ -243,7 +228,7 @@ BSC_TESTNET_VERIFIER=0x...    # For BSC Testnet deployment
 
 After completing the one-time setup, you can generate and verify proofs with different input values. **These steps can be repeated as many times as needed using the same deployed verifier contract.**
 
-### Step 5: Customize Input Values (Optional)
+### Step 4: Customize Input Values (Optional)
 
 Edit `prover/src/main.rs` to modify the verification inputs for your proof:
 
@@ -284,12 +269,11 @@ To convert a decimal value to fixed-point:
 fixed_point_value = decimal_value * 10000
 ```
 
-### Step 6: Generate Proof
+### Step 5: Generate Proof
 
 Run the prover to generate a ZKP proof with your input values:
 
 ```bash
-cd prover
 RUST_LOG=info cargo run --release --bin prover
 ```
 
@@ -310,7 +294,7 @@ Failed to generate evm proof: the proof file is not exists in /Users/june/Deskto
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 ```
 
-### Step 7: Verify Proof On-Chain
+### Step 6: Verify Proof On-Chain
 
 After generating a proof, verify it on-chain using the deployed verifier contract.
 
@@ -354,18 +338,14 @@ The script:
 # Step 1: Build the circuit
 cd app && cargo pico build && cd ..
 
-# Step 2: Generate app ID
-cd prover && cargo run --bin gen-app-id -- --elf ../app/elf/riscv32im-pico-zkvm-elf && cd ..
-# app_id: 0x000b1cc7dd74154f7e00097b8bf7dc33719c4f8530e917d52358e4ce4ec21de4
-
-# Step 3: Generate Groth16Verifier.sol directly (no proof needed!)
+# Step 2: Generate Groth16Verifier.sol directly (no proof needed!)
 docker run --rm -v $(pwd)/prover/data:/data brevishub/pico_gnark_cli:1.2 \
   /pico_gnark_cli \
   -field "kb" \
   -cmd setup \
   -sol /data/Groth16Verifier.sol
 
-# Step 4: Deploy verifier to Sepolia
+# Step 3: Deploy verifier to Sepolia
 cd contracts && \
 set -a && source ../.env && set +a && \
 forge script script/Deploy.s.sol:DeployPicoVerifier \
@@ -377,12 +357,12 @@ cd ..
 # Save the contract address to .env: SEPOLIA_VERIFIER=0x...
 
 # === REPEATED OPERATIONS ===
-# Step 5: (Optional) Edit input values in prover/src/main.rs
+# Step 4: (Optional) Edit input values in prover/src/main.rs
 
-# Step 6: Generate proof
-cd prover && RUST_LOG=info cargo run --release --bin prover && cd ..
+# Step 5: Generate proof
+RUST_LOG=info cargo run --release --bin prover && cd ..
 
-# Step 7: Verify proof on-chain
+# Step 6: Verify proof on-chain
 NETWORK=sepolia npm run verify
 ```
 
@@ -398,8 +378,8 @@ The deployed verifier contract can be verified against this repository to ensure
 ### How to Verify
 1. Clone this repository
 2. Follow Step 1 to build the guest program to get the ELF binary
-4. Follow Step 6 to generate a proof
-5. Follow Step 7 to verify the proof on-chain
+3. Follow Step 5 to generate a proof
+4. Follow Step 6 to verify the proof on-chain
 
 If the proof verification passes on-chain, it proves that the on-chain Verifier contract is bound to the circuit in this repository.
 
@@ -420,15 +400,15 @@ docker run -d --name pubsub-emulator -p 8085:8085 \
 
 # Terminal 2: Setup and listen for results
 export PUBSUB_EMULATOR_HOST=localhost:8085
-node scripts/test-pubsub.js setup
-node scripts/test-pubsub.js listen
+npm run pubsub:setup
+npm run pubsub:listen
 
 # Terminal 3: Run prover service
-cd prover && cargo run --release
+cargo run --release --bin prover
 
 # Terminal 4: Send test message
 export PUBSUB_EMULATOR_HOST=localhost:8085
-node scripts/test-pubsub.js publish normal
+npm run pubsub:publish normal
 ```
 
 See [Doc/testing-guide.md](Doc/testing-guide.md) for more test scenarios.

@@ -182,11 +182,10 @@ impl ProverService {
         let duration_ms = (completed_at - received_at).num_milliseconds() as u64;
 
         match result {
-            Ok(Ok((proof_data, setup_required))) => {
+            Ok(Ok(proof_data)) => {
                 info!(
                     request_id = %request_id,
                     duration_ms = duration_ms,
-                    setup_required = setup_required,
                     "Proof generated successfully"
                 );
 
@@ -195,7 +194,6 @@ impl ProverService {
                     started_at: started_at.to_rfc3339(),
                     completed_at: completed_at.to_rfc3339(),
                     duration_ms,
-                    setup_required,
                 };
 
                 Ok(ProverResponse::success(request_id, proof_data, metrics))
@@ -208,7 +206,6 @@ impl ProverService {
                     started_at: started_at.to_rfc3339(),
                     completed_at: completed_at.to_rfc3339(),
                     duration_ms,
-                    setup_required: false,
                 };
 
                 Ok(ProverResponse::failed(
@@ -233,7 +230,6 @@ impl ProverService {
                     started_at: started_at.to_rfc3339(),
                     completed_at: completed_at.to_rfc3339(),
                     duration_ms,
-                    setup_required: false,
                 };
 
                 Ok(ProverResponse::timeout(

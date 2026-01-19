@@ -90,9 +90,6 @@ pub struct ProofMetrics {
 
     /// Total duration in milliseconds
     pub duration_ms: u64,
-
-    /// Whether Groth16 setup was needed
-    pub setup_required: bool,
 }
 
 impl ProverResponse {

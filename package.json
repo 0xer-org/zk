@@ -4,7 +4,10 @@
   "description": "Scripts to verify Pico proofs on Sepolia",
   "type": "module",
   "scripts": {
-    "verify": "tsx verify-proof.ts"
+    "verify": "tsx scripts/verify-proof.ts",
+    "pubsub:setup": "tsx scripts/test-pubsub.ts setup",
+    "pubsub:listen": "tsx scripts/test-pubsub.ts listen",
+    "pubsub:publish": "tsx scripts/test-pubsub.ts publish"
   },
   "dependencies": {
     "@google-cloud/pubsub": "^5.2.2",

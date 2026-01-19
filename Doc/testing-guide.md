@@ -40,31 +40,31 @@ docker stop pubsub-emulator && docker rm pubsub-emulator
 **Terminal 2: Setup and Listen for Results**
 ```bash
 export PUBSUB_EMULATOR_HOST=localhost:8085
-node scripts/test-pubsub.js setup
-node scripts/test-pubsub.js listen
+npm run pubsub:setup
+npm run pubsub:listen
 ```
 
 **Terminal 3: Run Prover Service**
 ```bash
-cargo run --release --bin prover
+cd prover && cargo run --release --bin prover
 ```
 
 **Terminal 4: Send Test Messages**
 ```bash
 export PUBSUB_EMULATOR_HOST=localhost:8085
-node scripts/test-pubsub.js publish normal
+npm run pubsub:publish normal
 ```
 
 ## Test Script Commands
 
 ```bash
-node scripts/test-pubsub.js setup              # Create topics/subscriptions
-node scripts/test-pubsub.js publish normal     # Normal test case
-node scripts/test-pubsub.js publish boundary   # Boundary values test
-node scripts/test-pubsub.js publish invalid_json    # Invalid JSON test
-node scripts/test-pubsub.js publish missing_fields  # Missing fields test
-node scripts/test-pubsub.js listen              # Listen (Ctrl+C to stop)
-node scripts/test-pubsub.js listen 60           # Listen (60s timeout)
+npm run pubsub:setup                    # Create topics/subscriptions
+npm run pubsub:publish normal           # Normal test case
+npm run pubsub:publish boundary         # Boundary values test
+npm run pubsub:publish invalid_json     # Invalid JSON test
+npm run pubsub:publish missing_fields   # Missing fields test
+npm run pubsub:listen                   # Listen (Ctrl+C to stop)
+npm run pubsub:listen 60                # Listen (60s timeout)
 ```
 
 ## Test Scenarios

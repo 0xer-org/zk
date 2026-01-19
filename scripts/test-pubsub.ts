@@ -1,10 +1,10 @@
-#!/usr/bin/env node
+#!/usr/bin/env tsx
 /**
  * Test script for sending messages to Pub/Sub emulator.
  * This script creates test topics/subscriptions and sends test messages to the prover service.
  */
 
-import { PubSub } from "@google-cloud/pubsub";
+import { PubSub, Message } from "@google-cloud/pubsub";
 
 // Configuration
 const PROJECT_ID = process.env.GCP_PROJECT_ID || "test-project";
@@ -20,20 +20,52 @@ const RESULT_SUBSCRIPTION =
 
 const pubsub = new PubSub({ projectId: PROJECT_ID });
 
-async function createTopicsAndSubscriptions() {
+type Scenario = "normal" | "boundary" | "invalid_json" | "missing_fields";
+
+interface VerificationResults {
+  recaptcha_score: number;
+  sms_verified: number;
+  bio_verified?: number;
+}
+
+interface PublicInputs {
+  w1: number;
+  w2: number;
+  w3: number;
+  w4: number;
+  expected_output: number;
+}
+
+interface ProverRequest {
+  request_id: string;
+  verification_results: VerificationResults;
+  public_inputs: PublicInputs;
+}
+
+interface ProverResult {
+  request_id: string;
+  status: string;
+  proof_data?: unknown;
+  error?: unknown;
+  metrics?: unknown;
+}
+
+async function createTopicsAndSubscriptions(): Promise<void> {
   // Create topics
   try {
     await pubsub.createTopic(PROVER_TOPIC);
     console.log(`✓ Created topic: ${PROVER_TOPIC}`);
   } catch (e) {
-    console.log(`Topic ${PROVER_TOPIC} may already exist: ${e.message}`);
+    const err = e as Error;
+    console.log(`Topic ${PROVER_TOPIC} may already exist: ${err.message}`);
   }
 
   try {
     await pubsub.createTopic(RESULT_TOPIC);
     console.log(`✓ Created topic: ${RESULT_TOPIC}`);
   } catch (e) {
-    console.log(`Topic ${RESULT_TOPIC} may already exist: ${e.message}`);
+    const err = e as Error;
+    console.log(`Topic ${RESULT_TOPIC} may already exist: ${err.message}`);
   }
 
   // Create subscriptions
@@ -45,8 +77,9 @@ async function createTopicsAndSubscriptions() {
       `✓ Created subscription: ${PROVER_SUBSCRIPTION} (ack_deadline=600s)`
     );
   } catch (e) {
+    const err = e as Error;
     console.log(
-      `Subscription ${PROVER_SUBSCRIPTION} may already exist: ${e.message}`
+      `Subscription ${PROVER_SUBSCRIPTION} may already exist: ${err.message}`
     );
   }
 
@@ -54,13 +87,14 @@ async function createTopicsAndSubscriptions() {
     await pubsub.topic(RESULT_TOPIC).createSubscription(RESULT_SUBSCRIPTION);
     console.log(`✓ Created subscription: ${RESULT_SUBSCRIPTION}`);
   } catch (e) {
+    const err = e as Error;
     console.log(
-      `Subscription ${RESULT_SUBSCRIPTION} may already exist: ${e.message}`
+      `Subscription ${RESULT_SUBSCRIPTION} may already exist: ${err.message}`
     );
   }
 }
 
-function createTestMessage(requestId, scenario = "normal") {
+function createTestMessage(requestId: string, scenario: Scenario): string {
   /**
    * Create test message based on scenario.
    *
@@ -75,7 +109,7 @@ function createTestMessage(requestId, scenario = "normal") {
    * Formula: floor((W1 + W2 * recaptchaScore + W3 * smsVerified + W4 * bioVerified) * 255 / SCALE)
    */
 
-  let message;
+  let message: ProverRequest;
 
   if (scenario === "normal") {
     // Standard verification: 0.75 recaptcha, SMS verified, bio verified
@@ -131,7 +165,7 @@ function createTestMessage(requestId, scenario = "normal") {
         w4: 4000,
         expected_output: 204,
       },
-    };
+    } as ProverRequest;
   } else {
     throw new Error(`Unknown scenario: ${scenario}`);
   }
@@ -139,7 +173,10 @@ function createTestMessage(requestId, scenario = "normal") {
   return JSON.stringify(message);
 }
 
-async function publishTestMessage(scenario = "normal", requestId = null) {
+async function publishTestMessage(
+  scenario: Scenario = "normal",
+  requestId?: string
+): Promise<string> {
   const topic = pubsub.topic(PROVER_TOPIC);
 
   if (!requestId) {
@@ -161,22 +198,27 @@ async function publishTestMessage(scenario = "normal", requestId = null) {
   return messageId;
 }
 
-async function listenForResults(timeout = 30) {
+async function listenForResults(
+  timeout: number | null = 30
+): Promise<ProverResult[]> {
   const subscription = pubsub.subscription(RESULT_SUBSCRIPTION);
 
   console.log(`\n📡 Listening for results on ${RESULT_SUBSCRIPTION}...`);
-  console.log(`   Timeout: ${timeout === null ? "forever" : timeout + " seconds"}`);
+  console.log(
+    `   Timeout: ${timeout === null ? "forever" : timeout + " seconds"}`
+  );
 
-  const results = [];
+  const results: ProverResult[] = [];
 
-  const messageHandler = (message) => {
+  const messageHandler = (message: Message): void => {
     console.log(`\n✓ Received result message:`);
     try {
-      const data = JSON.parse(message.data.toString());
+      const data = JSON.parse(message.data.toString()) as ProverResult;
       console.log(JSON.stringify(data, null, 2));
       results.push(data);
     } catch (e) {
-      console.log(`  Error parsing message: ${e.message}`);
+      const err = e as Error;
+      console.log(`  Error parsing message: ${err.message}`);
       console.log(`  Raw data: ${message.data}`);
     }
     message.ack();
@@ -202,19 +244,19 @@ async function listenForResults(timeout = 30) {
   });
 }
 
-async function main() {
+async function main(): Promise<void> {
   const args = process.argv.slice(2);
 
   if (args.length < 1) {
     console.log("Usage:");
     console.log(
-      "  node scripts/test-pubsub.js setup          # Create topics and subscriptions"
+      "  npx tsx scripts/test-pubsub.ts setup          # Create topics and subscriptions"
     );
     console.log(
-      "  node scripts/test-pubsub.js publish <scenario>  # Publish test message"
+      "  npx tsx scripts/test-pubsub.ts publish <scenario>  # Publish test message"
     );
     console.log(
-      "  node scripts/test-pubsub.js listen         # Listen for results"
+      "  npx tsx scripts/test-pubsub.ts listen         # Listen for results"
     );
     console.log("\nScenarios: normal, boundary, invalid_json, missing_fields");
     console.log("\nEnvironment variables:");
@@ -234,13 +276,13 @@ async function main() {
     await createTopicsAndSubscriptions();
     console.log("\n✓ Setup complete!");
   } else if (command === "publish") {
-    const scenario = args[1] || "normal";
+    const scenario = (args[1] || "normal") as Scenario;
     console.log(`📤 Publishing test message (scenario: ${scenario})...`);
     await publishTestMessage(scenario);
     console.log("\n✓ Message published!");
   } else if (command === "listen") {
     const timeoutArg = args[1];
-    let results;
+    let results: ProverResult[];
     if (!timeoutArg || timeoutArg === "forever") {
       results = await listenForResults(null);
     } else {
