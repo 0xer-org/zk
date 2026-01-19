@@ -76,7 +76,9 @@ impl ProofGenerator {
         stdin_builder.write(&public_inputs.w4);
         stdin_builder.write(&expected_output);
 
-        // Symlink setup files from base data directory to proof directory (avoid copying large files)
+        // Hard link setup files from base data directory to proof directory
+        // Note: We use hard links instead of symlinks because Docker mounts the subdirectory,
+        // and symlinks pointing to files outside the mounted directory won't resolve in the container.
         let vm_pk_path = self.output_base_dir.join("vm_pk").canonicalize().map_err(|e| {
             ServiceError::ProofGeneration(format!(
                 "Groth16 setup file vm_pk not found at {}. Run the setup command first. Error: {}",
@@ -94,11 +96,11 @@ impl ProofGenerator {
 
         let dest_vm_pk = output_dir.join("vm_pk");
         let dest_vm_vk = output_dir.join("vm_vk");
-        std::os::unix::fs::symlink(&vm_pk_path, &dest_vm_pk).map_err(|e| {
-            ServiceError::ProofGeneration(format!("Failed to symlink vm_pk: {}", e))
+        std::fs::hard_link(&vm_pk_path, &dest_vm_pk).map_err(|e| {
+            ServiceError::ProofGeneration(format!("Failed to hard link vm_pk: {}", e))
         })?;
-        std::os::unix::fs::symlink(&vm_vk_path, &dest_vm_vk).map_err(|e| {
-            ServiceError::ProofGeneration(format!("Failed to symlink vm_vk: {}", e))
+        std::fs::hard_link(&vm_vk_path, &dest_vm_vk).map_err(|e| {
+            ServiceError::ProofGeneration(format!("Failed to hard link vm_vk: {}", e))
         })?;
 
         // Generate EVM proof (never run trusted setup)

@@ -42,11 +42,11 @@ const NETWORK_NAMES: Record<string, string> = {
 const networkName = NETWORK_NAMES[NETWORK] || NETWORK;
 
 async function main() {
-  // Read the inputs from the JSON file
-  const inputsPath = 'prover/data/inputs.json';
-  const inputsData = JSON.parse(readFileSync(inputsPath, 'utf-8'));
+  // Read the Groth16 proof from the JSON file
+  const proofPath = 'prover/data/groth16-proof.json';
+  const inputsData = JSON.parse(readFileSync(proofPath, 'utf-8'));
 
-  console.log('📄 Loaded proof data from:', inputsPath);
+  console.log('📄 Loaded proof data from:', proofPath);
   console.log('📍 Contract address:', VERIFIER_ADDRESS);
   console.log('🔗 Network:', networkName, `(${NETWORK})\n`);
 

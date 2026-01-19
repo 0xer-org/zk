@@ -59,7 +59,7 @@ interface ProverResult {
   metrics?: unknown;
 }
 
-const INPUTS_PATH = "prover/data/inputs.json";
+const GROTH16_PROOF_PATH = "prover/data/groth16-proof.json";
 
 function saveProofAsInputs(proofData: ProofData): void {
   // Decode base64 to get original values
@@ -73,9 +73,9 @@ function saveProofAsInputs(proofData: ProofData): void {
     riscvVKey,
   };
 
-  mkdirSync(dirname(INPUTS_PATH), { recursive: true });
-  writeFileSync(INPUTS_PATH, JSON.stringify(inputs, null, 2));
-  console.log(`\n💾 Saved proof to ${INPUTS_PATH}`);
+  mkdirSync(dirname(GROTH16_PROOF_PATH), { recursive: true });
+  writeFileSync(GROTH16_PROOF_PATH, JSON.stringify(inputs, null, 2));
+  console.log(`\n💾 Saved proof to ${GROTH16_PROOF_PATH}`);
   console.log(`   Run 'npm run verify' to verify on-chain`);
 }
 

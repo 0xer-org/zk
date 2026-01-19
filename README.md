@@ -80,10 +80,10 @@ humanIndex = floor((W1 + W2 * recaptchaScore + W3 * smsVerified + W4 * bioVerifi
 
 Before getting started, ensure you have the following installed:
 
-### 1. Docker (for verifier generation and proof generation)
+### 1. Docker (for proof generation)
 Docker is required for:
-- Generating the `Groth16Verifier.sol` contract (Step 3)
-- Generating proofs (Step 6)
+- Generating the Groth16 setup files and verifier contract (Step 2)
+- Generating proofs via Pub/Sub prover service (Step 4)
 
 Install Docker from [docker.com](https://www.docker.com/get-started)
 
@@ -145,29 +145,28 @@ This compiles the guest program to a RISC-V ELF binary at `app/elf/riscv32im-pic
 
 **Note**: You only need to rebuild the guest program if you modify the circuit logic in `app/src/main.rs`. For different input values, you don't need to rebuild.
 
-### Step 2: Generate Groth16Verifier Contract
+### Step 2: Generate Groth16 Setup Files and Verifier Contract
 
-You can generate the `Groth16Verifier.sol` contract directly using the Pico Gnark CLI Docker image, **without needing to generate a proof first**. This approach avoids the SDK limitation mentioned in [pico#93](https://github.com/brevis-network/pico/issues/93).
+Generate the Groth16 proving key, verification key, and `Groth16Verifier.sol` contract by running the setup script.
 
-From the project root directory, run:
+From the project root directory:
 
 ```bash
-docker run --rm -v $(pwd)/prover/data:/data brevishub/pico_gnark_cli:1.2 \
-  /pico_gnark_cli \
-  -field "kb" \
-  -cmd setup \
-  -sol /data/Groth16Verifier.sol
+cargo run --release --bin setup
 ```
 
 This command:
-- Mounts `/prover/data` (where `groth16_witness.json` lives) to `/data` in the container
-- Generates `Groth16Verifier.sol` directly in `/data` (which maps to `/prover/data` on your host)
+- Runs the full proof generation pipeline (RISCV → RECURSION → EVM phases) with dummy inputs
+- Generates Groth16 ProvingKey (`vm_pk`) and VerificationKey (`vm_vk`)
+- Outputs `Groth16Verifier.sol` and other artifacts to `prover/data/`
+
+**Note**: This setup only needs to be run once. The generated `vm_pk` and `vm_vk` files are reused for all subsequent proofs.
 
 ### Step 3: Deploy Verifier Contract
 
 Deploy the Solidity verifier contract to verify proofs on-chain. You only need to deploy once per network.
 
-Copy the generated `Groth16Verifier.sol` to the contracts source directory:
+Copy the `Groth16Verifier.sol` to the contracts source directory:
 
 ```bash
 cp prover/data/Groth16Verifier.sol contracts/src/
@@ -179,10 +178,7 @@ Then, navigate to the contracts directory and deploy using Foundry:
 cd contracts
 
 # Load environment variables from .env file
-set -a
 source ../.env
-set +a
-
 forge script script/Deploy.s.sol:DeployPicoVerifier \
     --rpc-url $RPC_URL \
     --broadcast \
@@ -198,13 +194,15 @@ forge script script/Deploy.s.sol:DeployPicoVerifier \
 
 Make sure your `.env` file contains `PRIVATE_KEY` and the appropriate RPC URL.
 
-**Important**: Save the deployed contract address to your `.env` file:
+After the deployment, save the deployed contract address to your `.env` file:
 ```bash
 # Add to .env
 SEPOLIA_VERIFIER=0x...        # For Sepolia deployment
 BSC_TESTNET_VERIFIER=0x...    # For BSC Testnet deployment
 # etc.
 ```
+
+**TODO**: Verifying the on-chain contract, which requires a command that verifies the relation between the `vm_pk` and the ELF.
 
 ### Step 4: Test Proof Generation with Pub/Sub Emulator
 
@@ -220,7 +218,7 @@ docker run -d --name pubsub-emulator -p 8085:8085 \
 Note: To stop the emulator:
 
 ```bash
-docker stop pubsub-emulator && docker rm pubsub-emulator`
+docker stop pubsub-emulator && docker rm pubsub-emulator
 ```
 
 **Terminal 2: Setup and Listen**
@@ -264,21 +262,15 @@ npm run pubsub:publish missing_fields # Missing `bio_verified` field
 
 After generating a proof, verify it on-chain using the deployed verifier contract.
 
-When `npm run pubsub:listen` receives a successful proof, it automatically saves the proof to `prover/data/inputs.json` in the format required for on-chain verification.
+When `npm run pubsub:listen` receives a successful proof, it automatically saves the proof to `prover/data/groth16-proof.json` in the format required for on-chain verification.
 
-By default, the script verifies on Ethereum Sepolia:
-
-```bash
-npm run verify
-```
-
-To verify on a different network, set the `NETWORK` environment variable:
+To verify the proof on chain, set the `NETWORK` environment variable:
 
 ```bash
 # Ethereum Mainnet
 NETWORK=mainnet npm run verify
 
-# Ethereum Sepolia
+# Ethereum Sepolia (default)
 NETWORK=sepolia npm run verify
 
 # BSC Mainnet
@@ -289,18 +281,11 @@ NETWORK=bsc-testnet npm run verify
 ```
 
 The script:
-1. Loads proof data from `prover/data/inputs.json` (auto-saved by `pubsub:listen`)
+1. Loads proof data from `prover/data/groth16-proof.json` (auto-saved by `pubsub:listen`)
 2. Reads the network from `NETWORK` environment variable (defaults to `sepolia`)
 3. Connects to the blockchain via your configured RPC URL
 4. Calls `verifyPicoProof()` on the deployed PicoVerifier contract
 5. Reports whether the verification succeeded or failed
-
-## Verifying the On-Chain Contract
-
-This requires a command that verifies the relation between the `vm_pk` and the ELF.
-
-### Deployed Contracts
-- Sepolia: 0x6D30a5BE6A1b79Fd3D254b0cC3152f77731c2768 (verified on Etherscan)
 
 ## References
 
