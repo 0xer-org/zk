@@ -59,8 +59,12 @@ impl Config {
         let elf_path = env::var("ELF_PATH")
             .unwrap_or_else(|_| "../app/elf/riscv32im-pico-zkvm-elf".to_string());
 
+        // Default to prover/data relative to the cargo manifest directory
         let output_dir = env::var("OUTPUT_DIR")
-            .unwrap_or_else(|_| "data".to_string());
+            .unwrap_or_else(|_| {
+                let manifest_dir = env!("CARGO_MANIFEST_DIR");
+                format!("{}/data", manifest_dir)
+            });
 
         let json_logging = env::var("JSON_LOGGING")
             .unwrap_or_else(|_| "false".to_string())

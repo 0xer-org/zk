@@ -8,9 +8,73 @@ This project implements a full ZKP pipeline that:
 1. **Compiles the ZKP circuit** (one-time setup)
 2. **Generates the verifier contract** directly from the circuit (one-time setup)
 3. **Deploys a Solidity verifier** contract to Ethereum and BSC networks (one-time setup)
-4. **Customizes input values** (optional, for proof generation)
+4. **Runs a Pub/Sub prover service** that receives proof requests and returns results via Google Cloud Pub/Sub
 5. **Generates proofs** of correct human index calculation without revealing private verification data (repeatable)
 6. **Verifies proofs on-chain** using the deployed contract (repeatable)
+
+## Pub/Sub Prover Service
+
+The prover can run as a cloud-native microservice using Google Cloud Pub/Sub:
+
+```
+┌─────────────────┐
+│   Pub/Sub       │
+│   Topic         │
+│  (Requests)     │
+└────────┬────────┘
+         │
+         │ Subscribe
+         ▼
+┌─────────────────────────────────────────┐
+│        Prover Service                   │
+│  ┌───────────────────────────────┐     │
+│  │  Subscription Handler         │     │
+│  │  - Receives messages          │     │
+│  │  - Semaphore (2-4 concurrent) │     │
+│  │  - ACK/NACK logic             │     │
+│  └───────────┬───────────────────┘     │
+│              │                          │
+│              ▼                          │
+│  ┌───────────────────────────────┐     │
+│  │  Proof Generator              │     │
+│  │  - Cached ELF                 │     │
+│  │  - Blocking proof generation  │     │
+│  │  - Base64 encoding            │     │
+│  └───────────┬───────────────────┘     │
+│              │                          │
+│              ▼                          │
+│  ┌───────────────────────────────┐     │
+│  │  Result Publisher             │     │
+│  │  - Publishes to result topic  │     │
+│  │  - Includes metrics           │     │
+│  └───────────────────────────────┘     │
+└─────────────────────────────────────────┘
+         │
+         │ Publish
+         ▼
+┌─────────────────┐
+│   Pub/Sub       │
+│   Topic         │
+│   (Results)     │
+└─────────────────┘
+```
+
+**Environment Variables:**
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `GCP_PROJECT_ID` | Google Cloud project ID | (required) |
+| `PROVER_SUBSCRIPTION` | Subscription for requests | (required) |
+| `RESULT_TOPIC` | Topic for results | (required) |
+| `MAX_CONCURRENT_PROOFS` | Concurrent proof limit | 2 |
+| `PROOF_TIMEOUT_SECS` | Timeout per proof | 3600 |
+
+**Run the service:**
+```bash
+cd prover
+cargo run --release
+```
+
+**Note:** Messages are ACKed immediately upon receipt to prevent redelivery during long proof generation. If proof generation fails, the request will NOT be automatically retried. The caller should handle retries based on the error response.
 
 ### Formula
 
@@ -346,57 +410,28 @@ If the proof verification passes on-chain, it proves that the on-chain Verifier 
 
 ### Local Testing with Pub/Sub Emulator
 
-For testing the Pub/Sub-based prover service locally, use the Google Cloud Pub/Sub Emulator running in Docker. Detailed instructions are in [Doc/testing-guide.md](Doc/testing-guide.md).
-
-#### Prerequisites
-- Docker (for Pub/Sub emulator)
-- Python 3.9+ (for test scripts)
-
-#### Quick start:
+Test the Pub/Sub prover service locally using Google Cloud Pub/Sub Emulator.
 
 ```bash
-# 1. Install Python dependencies for testing
-./scripts/setup-test-env.sh
+# Terminal 1: Start emulator
+docker run -d --name pubsub-emulator -p 8085:8085 \
+  gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators \
+  gcloud beta emulators pubsub start --project=test-project --host-port=0.0.0.0:8085
 
-# 2. Start the emulator (Docker-based, runs in background)
-./scripts/start-emulator.sh
+# Terminal 2: Setup and listen for results
+export PUBSUB_EMULATOR_HOST=localhost:8085
+node scripts/test-pubsub.js setup
+node scripts/test-pubsub.js listen
 
-# 3. Run end-to-end test
-./scripts/run-test.sh e2e
+# Terminal 3: Run prover service
+cd prover && cargo run --release
 
-# 4. Stop the emulator when done
-./scripts/stop-emulator.sh
+# Terminal 4: Send test message
+export PUBSUB_EMULATOR_HOST=localhost:8085
+node scripts/test-pubsub.js publish normal
 ```
 
-#### Emulator Management:
-```bash
-# Start emulator (runs in Docker background)
-./scripts/start-emulator.sh
-
-# Stop and remove emulator container
-./scripts/stop-emulator.sh
-
-# View emulator logs
-docker logs -f pubsub-emulator
-
-# Check emulator status
-docker ps | grep pubsub-emulator
-```
-
-For more testing options:
-```bash
-# Publish a test message
-./scripts/run-test.sh publish normal
-
-# Listen for results
-./scripts/run-test.sh listen 30
-```
-
-See [Doc/testing-guide.md](Doc/testing-guide.md) for comprehensive testing documentation including:
-- Docker-based Pub/Sub Emulator setup
-- Test message formats and scenarios
-- Running the prover service with the emulator
-- Troubleshooting common issues
+See [Doc/testing-guide.md](Doc/testing-guide.md) for more test scenarios.
 
 ## References
 

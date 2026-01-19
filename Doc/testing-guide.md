@@ -5,39 +5,43 @@ This guide covers how to test the ZK prover service locally using the Google Clo
 ## Prerequisites
 
 - Docker (for Pub/Sub Emulator)
-- Python 3.7+
-- Python packages: `google-cloud-pubsub`
+- Node.js 18+ (or Python 3.7+)
 
 ## Setup
 
-### 1. Install Python Dependencies
+### Install Dependencies
 
+**Node.js (recommended):**
 ```bash
-./scripts/setup-test-env.sh
+npm install @google-cloud/pubsub
 ```
-
-This creates a virtual environment and installs required packages.
 
 ## Running Tests
 
 **Terminal 1: Start Emulator**
 
 ```bash
-./scripts/start-emulator.sh
+docker rm -f pubsub-emulator 2>/dev/null
+docker run -d \
+    --name pubsub-emulator \
+    -p 8085:8085 \
+    -e PUBSUB_PROJECT_ID=test-project \
+    gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators \
+    gcloud beta emulators pubsub start \
+        --project=test-project \
+        --host-port=0.0.0.0:8085
 ```
-
-This starts the emulator via Docker on `localhost:8085`.
 
 To stop the emulator:
 ```bash
-./scripts/stop-emulator.sh
+docker stop pubsub-emulator && docker rm pubsub-emulator
 ```
 
 **Terminal 2: Setup and Listen for Results**
 ```bash
 export PUBSUB_EMULATOR_HOST=localhost:8085
-python scripts/test-pubsub.py setup
-python scripts/test-pubsub.py listen forever
+node scripts/test-pubsub.js setup
+node scripts/test-pubsub.js listen
 ```
 
 **Terminal 3: Run Prover Service**
@@ -48,21 +52,19 @@ cargo run --release --bin prover
 **Terminal 4: Send Test Messages**
 ```bash
 export PUBSUB_EMULATOR_HOST=localhost:8085
-python scripts/test-pubsub.py publish normal
+node scripts/test-pubsub.js publish normal
 ```
 
 ## Test Script Commands
 
-Use `test-pubsub.py` directly (requires environment variables):
-
 ```bash
-python scripts/test-pubsub.py setup              # Create topics/subscriptions
-python scripts/test-pubsub.py publish normal     # Normal test case
-python scripts/test-pubsub.py publish boundary   # Boundary values test
-python scripts/test-pubsub.py publish invalid_json    # Invalid JSON test
-python scripts/test-pubsub.py publish missing_fields  # Missing fields test
-python scripts/test-pubsub.py listen              # Listen (30s timeout)
-python scripts/test-pubsub.py listen forever      # Listen forever (Ctrl+C to stop)
+node scripts/test-pubsub.js setup              # Create topics/subscriptions
+node scripts/test-pubsub.js publish normal     # Normal test case
+node scripts/test-pubsub.js publish boundary   # Boundary values test
+node scripts/test-pubsub.js publish invalid_json    # Invalid JSON test
+node scripts/test-pubsub.js publish missing_fields  # Missing fields test
+node scripts/test-pubsub.js listen              # Listen (Ctrl+C to stop)
+node scripts/test-pubsub.js listen 60           # Listen (60s timeout)
 ```
 
 ## Test Scenarios

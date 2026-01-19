@@ -7,6 +7,7 @@
     "verify": "tsx verify-proof.ts"
   },
   "dependencies": {
+    "@google-cloud/pubsub": "^5.2.2",
     "dotenv": "^16.4.7",
     "ethers": "^6.13.4"
   },

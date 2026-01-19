@@ -6,7 +6,6 @@ use chrono::Utc;
 use google_cloud_googleapis::pubsub::v1::PubsubMessage;
 use google_cloud_pubsub::client::{Client, ClientConfig};
 use google_cloud_pubsub::subscription::Subscription;
-use google_cloud_pubsub::topic::Topic;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -20,7 +19,7 @@ pub struct ProverService {
     config: Config,
     cached_elf: Arc<CachedElf>,
     subscription: Subscription,
-    result_publisher: Topic,
+    result_topic_path: String,
     semaphore: Arc<Semaphore>,
 }
 
@@ -43,12 +42,11 @@ impl ProverService {
         );
         let subscription = client.subscription(&subscription_path);
 
-        // Create persistent result topic publisher
+        // Store result topic path for publishing
         let result_topic_path = format!(
             "projects/{}/topics/{}",
             config.gcp_project_id, config.result_topic
         );
-        let result_publisher = client.topic(&result_topic_path);
 
         // Create semaphore for concurrency control
         let semaphore = Arc::new(Semaphore::new(config.max_concurrent_proofs));
@@ -62,7 +60,7 @@ impl ProverService {
             config,
             cached_elf,
             subscription,
-            result_publisher,
+            result_topic_path,
             semaphore,
         })
     }
@@ -76,7 +74,7 @@ impl ProverService {
 
         let config = self.config.clone();
         let cached_elf = self.cached_elf.clone();
-        let result_publisher = self.result_publisher.clone();
+        let result_topic_path = self.result_topic_path.clone();
         let semaphore = self.semaphore.clone();
 
         // Subscribe to messages with handler function
@@ -85,7 +83,7 @@ impl ProverService {
                 move |message, _cancel| {
                     let config = config.clone();
                     let cached_elf = cached_elf.clone();
-                    let result_publisher = result_publisher.clone();
+                    let result_topic_path = result_topic_path.clone();
                     let semaphore = semaphore.clone();
 
                     async move {
@@ -124,7 +122,7 @@ impl ProverService {
                             Ok(response) => {
                                 // Publish result
                                 if let Err(e) =
-                                    Self::publish_result(&result_publisher, &response).await
+                                    Self::publish_result(&result_topic_path, &response).await
                                 {
                                     error!(
                                         request_id = response.request_id,
@@ -252,22 +250,28 @@ impl ProverService {
 
     /// Publish result to result topic
     async fn publish_result(
-        publisher: &Topic,
+        result_topic: &str,
         response: &ProverResponse,
     ) -> Result<(), ServiceError> {
-        let data = serde_json::to_vec(response)?;
+        // Create fresh client to avoid stale connections after long proof generation
+        let client = Client::new(ClientConfig::default())
+            .await
+            .map_err(|e| ServiceError::PubSub(format!("Failed to create client: {}", e)))?;
 
+        let topic = client.topic(result_topic);
+        let publisher = topic.new_publisher(None);
+
+        let data = serde_json::to_vec(response)?;
         let message = PubsubMessage {
             data,
             ..Default::default()
         };
 
-        let awaiter = publisher.new_publisher(None).publish(message).await;
-
+        let awaiter = publisher.publish(message).await;
         awaiter
             .get()
             .await
-            .map_err(|e| ServiceError::PubSub(format!("Failed to get publish result: {}", e)))?;
+            .map_err(|e| ServiceError::PubSub(format!("Failed to publish: {}", e)))?;
 
         debug!(
             request_id = response.request_id,
