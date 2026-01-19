@@ -392,28 +392,67 @@ If the proof verification passes on-chain, it proves that the on-chain Verifier 
 
 Test the Pub/Sub prover service locally using Google Cloud Pub/Sub Emulator.
 
+**Terminal 1: Start Emulator**
 ```bash
-# Terminal 1: Start emulator
+docker rm -f pubsub-emulator 2>/dev/null
 docker run -d --name pubsub-emulator -p 8085:8085 \
+  -e PUBSUB_PROJECT_ID=test-project \
   gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators \
   gcloud beta emulators pubsub start --project=test-project --host-port=0.0.0.0:8085
+```
 
-# Terminal 2: Setup and listen for results
+**Terminal 2: Setup and Listen**
+```bash
 export PUBSUB_EMULATOR_HOST=localhost:8085
-npm run pubsub:setup
-npm run pubsub:listen
+npm run pubsub:setup && npm run pubsub:listen
+```
 
-# Terminal 3: Run prover service
+**Terminal 3: Run Prover**
+```bash
 cargo run --release --bin prover
+```
 
-# Terminal 4: Send test message
+**Terminal 4: Send Test Messages**
+```bash
 export PUBSUB_EMULATOR_HOST=localhost:8085
 npm run pubsub:publish normal
 ```
 
-See [Doc/testing-guide.md](Doc/testing-guide.md) for more test scenarios.
+### Test Commands
+
+| Command | Description |
+|---------|-------------|
+| `npm run pubsub:setup` | Create topics and subscriptions |
+| `npm run pubsub:publish normal` | Standard test (0.75 recaptcha, SMS & bio verified) |
+| `npm run pubsub:publish boundary` | Edge case (perfect recaptcha 1.0, all verified) |
+| `npm run pubsub:publish invalid_json` | Malformed JSON for error handling |
+| `npm run pubsub:publish missing_fields` | Missing `bio_verified` field |
+| `npm run pubsub:listen` | Listen for results (Ctrl+C to stop) |
+| `npm run pubsub:listen 60` | Listen with 60s timeout |
+
+### Expected Results
+
+**Successful Proof:**
+```json
+{
+  "request_id": "test-normal-001",
+  "status": "success",
+  "proof_data": { "proof": "0x...", "public_values": "0x..." },
+  "metrics": { "proof_generation_secs": 45.2, "total_processing_secs": 45.5 }
+}
+```
+
+**Failed Proof:**
+```json
+{
+  "request_id": "test-invalid-001",
+  "status": "failed",
+  "error": { "code": "PROOF_GENERATION_ERROR", "message": "Failed to generate proof: invalid input" }
+}
+```
+
+To stop the emulator: `docker stop pubsub-emulator && docker rm pubsub-emulator`
 
 ## References
 
 - [Pico Documentation](https://pico-docs.brevis.network/)
-- [Testing Guide](Doc/testing-guide.md) - Local testing with Pub/Sub Emulator
