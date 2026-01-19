@@ -59,22 +59,6 @@ The prover can run as a cloud-native microservice using Google Cloud Pub/Sub:
 └─────────────────┘
 ```
 
-**Environment Variables:**
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `GCP_PROJECT_ID` | Google Cloud project ID | (required) |
-| `PROVER_SUBSCRIPTION` | Subscription for requests | (required) |
-| `RESULT_TOPIC` | Topic for results | (required) |
-| `MAX_CONCURRENT_PROOFS` | Concurrent proof limit | 2 |
-| `PROOF_TIMEOUT_SECS` | Timeout per proof | 3600 |
-
-**Run the service:**
-```bash
-cargo run --release --bin prover
-```
-
-**Note:** Messages are ACKed immediately upon receipt to prevent redelivery during long proof generation. If proof generation fails, the request will NOT be automatically retried. The caller should handle retries based on the error response.
-
 ### Formula
 
 ```
@@ -222,81 +206,65 @@ BSC_TESTNET_VERIFIER=0x...    # For BSC Testnet deployment
 # etc.
 ```
 
----
+### Step 4: Test Proof Generation with Pub/Sub Emulator
 
-## Generating and Verifying Proofs
-
-After completing the one-time setup, you can generate and verify proofs with different input values. **These steps can be repeated as many times as needed using the same deployed verifier contract.**
-
-### Step 4: Customize Input Values (Optional)
-
-Edit `prover/src/main.rs` to modify the verification inputs for your proof:
-
-#### Private Inputs
-
-```rust
-// recaptcha_score: 0.75 in fixed-point = 7500
-let recaptcha_score = 7500u32;
-// sms_verified: true = 1
-let sms_verified = 1u32;
-// bio_verified: true = 1
-let bio_verified = 1u32;
+**Terminal 1: Start Emulator**
+```bash
+docker rm -f pubsub-emulator 2>/dev/null
+docker run -d --name pubsub-emulator -p 8085:8085 \
+  -e PUBSUB_PROJECT_ID=test-project \
+  gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators \
+  gcloud beta emulators pubsub start --project=test-project --host-port=0.0.0.0:8085
 ```
 
-#### Public Inputs
-
-```rust
-// W1 = 0.15 -> 1500
-let w1 = 1500u32;
-// W2 = 0.2 -> 2000
-let w2 = 2000u32;
-// W3 = 0.25 -> 2500
-let w3 = 2500u32;
-// W4 = 0.4 -> 4000
-let w4 = 4000u32;
-```
-
-#### Fixed-Point Arithmetic
-
-All decimal values use a **fixed-point scale of 10,000**:
-
-- `0.15` → `1500` (multiply by 10,000)
-- `0.75` → `7500` (multiply by 10,000)
-- `1.0` → `10000` (multiply by 10,000)
-
-To convert a decimal value to fixed-point:
-```
-fixed_point_value = decimal_value * 10000
-```
-
-### Step 5: Generate Proof
-
-Run the prover to generate a ZKP proof with your input values:
+Note: To stop the emulator:
 
 ```bash
-RUST_LOG=info cargo run --release --bin prover
+docker stop pubsub-emulator && docker rm pubsub-emulator`
 ```
 
-This will:
-1. Load the compiled guest program (from Step 1)
-2. Use the input data you configured in Step 5 (or default values)
-3. Generate a ZKP proof
-4. Verify the proof locally
-5. Save proof data to `target/pico_out/inputs.json`
-6. Display the computation results
-
-**Note**: This step creates a Docker container, which requires approximately 32GB of memory and can take around 30 minutes to complete.
-If you encounter the following error, it likely indicates insufficient Docker memory:
-
-```
-thread 'main' panicked at prover/src/main.rs:69:69:
-Failed to generate evm proof: the proof file is not exists in /Users/june/Desktop/zk/prover/../target/pico_out/proof.data. The preceding Docker step likely failed to write outputs (commonly due to insufficient Docker memory). Check the `docker` logs or increase Docker's memory limit.
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+**Terminal 2: Setup and Listen**
+```bash
+export PUBSUB_EMULATOR_HOST=localhost:8085
+npm run pubsub:setup
+npm run pubsub:listen
 ```
 
-### Step 6: Verify Proof On-Chain
+**Terminal 3: Run Prover**
+
+Environment Variables:
+
+| Variable                | Description               | Default    |
+| ----------------------- | ------------------------- | ---------- |
+| `GCP_PROJECT_ID`        | Google Cloud project ID   | (required) |
+| `PROVER_SUBSCRIPTION`   | Subscription for requests | (required) |
+| `RESULT_TOPIC`          | Topic for results         | (required) |
+| `MAX_CONCURRENT_PROOFS` | Concurrent proof limit    | 2          |
+| `PROOF_TIMEOUT_SECS`    | Timeout per proof         | 3600       |
+
+Note: Messages are ACKed immediately upon receipt to prevent redelivery during long proof generation. If proof generation fails, the request will NOT be automatically retried. The caller should handle retries based on the error response.
+
+```bash
+cargo run --release --bin prover
+```
+
+**Terminal 4: Send Test Messages**
+```bash
+export PUBSUB_EMULATOR_HOST=localhost:8085
+npm run pubsub:publish normal         # Standard test (0.75 recaptcha, SMS & bio verified)
+# or
+npm run pubsub:publish boundary       # Edge case (perfect recaptcha 1.0, all verified)
+# or
+npm run pubsub:publish invalid_json   # Malformed JSON for error handling
+# or
+npm run pubsub:publish missing_fields # Missing `bio_verified` field
+```
+
+### Step 5: Verify Proof On-Chain
 
 After generating a proof, verify it on-chain using the deployed verifier contract.
+
+When `npm run pubsub:listen` receives a successful proof, it automatically saves the proof to `prover/data/inputs.json` in the format required for on-chain verification.
 
 By default, the script verifies on Ethereum Sepolia:
 
@@ -321,137 +289,18 @@ NETWORK=bsc-testnet npm run verify
 ```
 
 The script:
-1. Loads proof data from `target/pico_out/inputs.json` (generated in Step 6)
+1. Loads proof data from `prover/data/inputs.json` (auto-saved by `pubsub:listen`)
 2. Reads the network from `NETWORK` environment variable (defaults to `sepolia`)
 3. Connects to the blockchain via your configured RPC URL
 4. Calls `verifyPicoProof()` on the deployed PicoVerifier contract
 5. Reports whether the verification succeeded or failed
 
----
-
-## Complete Workflow Examples
-
-### Ethereum Sepolia
-
-```bash
-# === ONE-TIME SETUP ===
-# Step 1: Build the circuit
-cd app && cargo pico build && cd ..
-
-# Step 2: Generate Groth16Verifier.sol directly (no proof needed!)
-docker run --rm -v $(pwd)/prover/data:/data brevishub/pico_gnark_cli:1.2 \
-  /pico_gnark_cli \
-  -field "kb" \
-  -cmd setup \
-  -sol /data/Groth16Verifier.sol
-
-# Step 3: Deploy verifier to Sepolia
-cd contracts && \
-set -a && source ../.env && set +a && \
-forge script script/Deploy.s.sol:DeployPicoVerifier \
-    --rpc-url $SEPOLIA_RPC_URL \
-    --broadcast \
-    --verify \
-    -vvvv && \
-cd ..
-# Save the contract address to .env: SEPOLIA_VERIFIER=0x...
-
-# === REPEATED OPERATIONS ===
-# Step 4: (Optional) Edit input values in prover/src/main.rs
-
-# Step 5: Generate proof
-RUST_LOG=info cargo run --release --bin prover && cd ..
-
-# Step 6: Verify proof on-chain
-NETWORK=sepolia npm run verify
-```
-
 ## Verifying the On-Chain Contract
 
-The deployed verifier contract can be verified against this repository to ensure the on-chain contract is bound to the circuit in this repo.
-
-### What's Committed to This Repository
-- Contract Source: `contracts/src/Groth16Verifier.sol` - the verifier contract code
-- Verification Key: `prover/data/vm_vk` and `prover/data/vm_vk` - used to generate the contract
-- Circuit Code: `app/src/main.rs` - the ZKP circuit logic
-
-### How to Verify
-1. Clone this repository
-2. Follow Step 1 to build the guest program to get the ELF binary
-3. Follow Step 5 to generate a proof
-4. Follow Step 6 to verify the proof on-chain
-
-If the proof verification passes on-chain, it proves that the on-chain Verifier contract is bound to the circuit in this repository.
+This requires a command that verifies the relation between the `vm_pk` and the ELF.
 
 ### Deployed Contracts
 - Sepolia: 0x6D30a5BE6A1b79Fd3D254b0cC3152f77731c2768 (verified on Etherscan)
-
-## Testing
-
-### Local Testing with Pub/Sub Emulator
-
-Test the Pub/Sub prover service locally using Google Cloud Pub/Sub Emulator.
-
-**Terminal 1: Start Emulator**
-```bash
-docker rm -f pubsub-emulator 2>/dev/null
-docker run -d --name pubsub-emulator -p 8085:8085 \
-  -e PUBSUB_PROJECT_ID=test-project \
-  gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators \
-  gcloud beta emulators pubsub start --project=test-project --host-port=0.0.0.0:8085
-```
-
-**Terminal 2: Setup and Listen**
-```bash
-export PUBSUB_EMULATOR_HOST=localhost:8085
-npm run pubsub:setup && npm run pubsub:listen
-```
-
-**Terminal 3: Run Prover**
-```bash
-cargo run --release --bin prover
-```
-
-**Terminal 4: Send Test Messages**
-```bash
-export PUBSUB_EMULATOR_HOST=localhost:8085
-npm run pubsub:publish normal
-```
-
-### Test Commands
-
-| Command | Description |
-|---------|-------------|
-| `npm run pubsub:setup` | Create topics and subscriptions |
-| `npm run pubsub:publish normal` | Standard test (0.75 recaptcha, SMS & bio verified) |
-| `npm run pubsub:publish boundary` | Edge case (perfect recaptcha 1.0, all verified) |
-| `npm run pubsub:publish invalid_json` | Malformed JSON for error handling |
-| `npm run pubsub:publish missing_fields` | Missing `bio_verified` field |
-| `npm run pubsub:listen` | Listen for results (Ctrl+C to stop) |
-| `npm run pubsub:listen 60` | Listen with 60s timeout |
-
-### Expected Results
-
-**Successful Proof:**
-```json
-{
-  "request_id": "test-normal-001",
-  "status": "success",
-  "proof_data": { "proof": "0x...", "public_values": "0x..." },
-  "metrics": { "proof_generation_secs": 45.2, "total_processing_secs": 45.5 }
-}
-```
-
-**Failed Proof:**
-```json
-{
-  "request_id": "test-invalid-001",
-  "status": "failed",
-  "error": { "code": "PROOF_GENERATION_ERROR", "message": "Failed to generate proof: invalid input" }
-}
-```
-
-To stop the emulator: `docker stop pubsub-emulator && docker rm pubsub-emulator`
 
 ## References
 

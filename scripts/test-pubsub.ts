@@ -5,6 +5,8 @@
  */
 
 import { PubSub, Message } from "@google-cloud/pubsub";
+import { writeFileSync, mkdirSync } from "fs";
+import { dirname } from "path";
 
 // Configuration
 const PROJECT_ID = process.env.GCP_PROJECT_ID || "test-project";
@@ -42,12 +44,39 @@ interface ProverRequest {
   public_inputs: PublicInputs;
 }
 
+interface ProofData {
+  proof: string; // base64 encoded
+  public_inputs: string; // base64 encoded
+  verification_key: string; // base64 encoded
+  human_index: number;
+}
+
 interface ProverResult {
   request_id: string;
   status: string;
-  proof_data?: unknown;
+  proof_data?: ProofData;
   error?: unknown;
   metrics?: unknown;
+}
+
+const INPUTS_PATH = "prover/data/inputs.json";
+
+function saveProofAsInputs(proofData: ProofData): void {
+  // Decode base64 to get original values
+  const proof = JSON.parse(Buffer.from(proofData.proof, "base64").toString());
+  const publicValues = Buffer.from(proofData.public_inputs, "base64").toString();
+  const riscvVKey = Buffer.from(proofData.verification_key, "base64").toString();
+
+  const inputs = {
+    proof,
+    publicValues,
+    riscvVKey,
+  };
+
+  mkdirSync(dirname(INPUTS_PATH), { recursive: true });
+  writeFileSync(INPUTS_PATH, JSON.stringify(inputs, null, 2));
+  console.log(`\n💾 Saved proof to ${INPUTS_PATH}`);
+  console.log(`   Run 'npm run verify' to verify on-chain`);
 }
 
 async function createTopicsAndSubscriptions(): Promise<void> {
@@ -216,6 +245,11 @@ async function listenForResults(
       const data = JSON.parse(message.data.toString()) as ProverResult;
       console.log(JSON.stringify(data, null, 2));
       results.push(data);
+
+      // Save successful proof to inputs.json for on-chain verification
+      if (data.status === "success" && data.proof_data) {
+        saveProofAsInputs(data.proof_data);
+      }
     } catch (e) {
       const err = e as Error;
       console.log(`  Error parsing message: ${err.message}`);
