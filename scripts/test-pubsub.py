@@ -207,7 +207,6 @@ def main():
         print("  python scripts/test-pubsub.py setup          # Create topics and subscriptions")
         print("  python scripts/test-pubsub.py publish <scenario>  # Publish test message")
         print("  python scripts/test-pubsub.py listen         # Listen for results")
-        print("  python scripts/test-pubsub.py e2e            # End-to-end test")
         print("\nScenarios: normal, boundary, invalid_json, missing_fields")
         print("\nEnvironment variables:")
         print(f"  PUBSUB_EMULATOR_HOST: {os.getenv('PUBSUB_EMULATOR_HOST', 'not set')}")
@@ -236,26 +235,6 @@ def main():
         else:
             results = listen_for_results(timeout=int(timeout_arg))
         print(f"\n✓ Received {len(results)} result(s)")
-
-    elif command == "e2e":
-        print("🧪 Running end-to-end test...")
-        print("\n1️⃣ Setting up topics and subscriptions...")
-        create_topics_and_subscriptions()
-
-        print("\n2️⃣ Publishing test message...")
-        request_id = f"e2e-test-{int(time.time())}"
-        publish_test_message("normal", request_id)
-
-        print("\n3️⃣ Waiting for results...")
-        results = listen_for_results(timeout=None)
-
-        if results:
-            print(f"\n✓ E2E test complete! Received {len(results)} result(s)")
-            for i, result in enumerate(results, 1):
-                print(f"\nResult {i}:")
-                print(json.dumps(result, indent=2))
-        else:
-            print("\n⚠ No results received within timeout period")
 
     else:
         print(f"Unknown command: {command}")

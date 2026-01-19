@@ -18,7 +18,9 @@ This guide covers how to test the ZK prover service locally using the Google Clo
 
 This creates a virtual environment and installs required packages.
 
-### 2. Start the Pub/Sub Emulator
+## Running Tests
+
+**Terminal 1: Start Emulator**
 
 ```bash
 ./scripts/start-emulator.sh
@@ -29,15 +31,6 @@ This starts the emulator via Docker on `localhost:8085`.
 To stop the emulator:
 ```bash
 ./scripts/stop-emulator.sh
-```
-
-## Running Tests
-
-### Manual Testing (4 Terminals)
-
-**Terminal 1: Start Emulator**
-```bash
-./scripts/start-emulator.sh
 ```
 
 **Terminal 2: Setup and Listen for Results**
@@ -70,7 +63,6 @@ python scripts/test-pubsub.py publish invalid_json    # Invalid JSON test
 python scripts/test-pubsub.py publish missing_fields  # Missing fields test
 python scripts/test-pubsub.py listen              # Listen (30s timeout)
 python scripts/test-pubsub.py listen forever      # Listen forever (Ctrl+C to stop)
-python scripts/test-pubsub.py e2e                 # Full E2E test
 ```
 
 ## Test Scenarios

@@ -6,6 +6,7 @@ use chrono::Utc;
 use google_cloud_googleapis::pubsub::v1::PubsubMessage;
 use google_cloud_pubsub::client::{Client, ClientConfig};
 use google_cloud_pubsub::subscription::Subscription;
+use google_cloud_pubsub::topic::Topic;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -18,8 +19,8 @@ use tracing::{debug, error, info, warn};
 pub struct ProverService {
     config: Config,
     cached_elf: Arc<CachedElf>,
-    client: Client,
     subscription: Subscription,
+    result_publisher: Topic,
     semaphore: Arc<Semaphore>,
 }
 
@@ -42,6 +43,13 @@ impl ProverService {
         );
         let subscription = client.subscription(&subscription_path);
 
+        // Create persistent result topic publisher
+        let result_topic_path = format!(
+            "projects/{}/topics/{}",
+            config.gcp_project_id, config.result_topic
+        );
+        let result_publisher = client.topic(&result_topic_path);
+
         // Create semaphore for concurrency control
         let semaphore = Arc::new(Semaphore::new(config.max_concurrent_proofs));
 
@@ -53,8 +61,8 @@ impl ProverService {
         Ok(Self {
             config,
             cached_elf,
-            client,
             subscription,
+            result_publisher,
             semaphore,
         })
     }
@@ -68,11 +76,8 @@ impl ProverService {
 
         let config = self.config.clone();
         let cached_elf = self.cached_elf.clone();
-        let client = self.client.clone();
+        let result_publisher = self.result_publisher.clone();
         let semaphore = self.semaphore.clone();
-        // Use full topic path
-        let result_topic = format!("projects/{}/topics/{}",
-            self.config.gcp_project_id, self.config.result_topic);
 
         // Subscribe to messages with handler function
         self.subscription
@@ -80,9 +85,8 @@ impl ProverService {
                 move |message, _cancel| {
                     let config = config.clone();
                     let cached_elf = cached_elf.clone();
-                    let client = client.clone();
+                    let result_publisher = result_publisher.clone();
                     let semaphore = semaphore.clone();
-                    let result_topic = result_topic.clone();
 
                     async move {
                         // Try to acquire permit
@@ -100,7 +104,15 @@ impl ProverService {
                         let received_at = Utc::now();
                         let ack_id = message.ack_id().to_string();
 
-                        // Process the message
+                        // Immediately ACK to prevent redelivery (proof generation takes hours)
+                        if let Err(e) = message.ack().await {
+                            error!(ack_id = ack_id, "Failed to ACK message: {}", e);
+                            drop(permit);
+                            return;
+                        }
+                        debug!(ack_id = ack_id, "Message ACKed immediately to prevent redelivery");
+
+                        // Process the message (no retry on failure)
                         match Self::process_message(
                             &message.message.data,
                             config,
@@ -112,27 +124,17 @@ impl ProverService {
                             Ok(response) => {
                                 // Publish result
                                 if let Err(e) =
-                                    Self::publish_result(&client, &result_topic, &response).await
+                                    Self::publish_result(&result_publisher, &response).await
                                 {
                                     error!(
                                         request_id = response.request_id,
                                         "Failed to publish result: {}", e
                                     );
                                 }
-
-                                // ACK the message
-                                if let Err(e) = message.ack().await {
-                                    error!(ack_id = ack_id, "Failed to ACK message: {}", e);
-                                } else {
-                                    debug!(ack_id = ack_id, "Message ACKed successfully");
-                                }
                             }
                             Err(e) => {
                                 error!("Failed to process message: {}", e);
-                                // NACK the message to retry
-                                if let Err(e) = message.nack().await {
-                                    error!(ack_id = ack_id, "Failed to NACK message: {}", e);
-                                }
+                                // Message already ACKed, no retry will happen
                             }
                         }
 
@@ -250,12 +252,9 @@ impl ProverService {
 
     /// Publish result to result topic
     async fn publish_result(
-        client: &Client,
-        result_topic: &str,
+        publisher: &Topic,
         response: &ProverResponse,
     ) -> Result<(), ServiceError> {
-        let topic = client.topic(result_topic);
-
         let data = serde_json::to_vec(response)?;
 
         let message = PubsubMessage {
@@ -263,7 +262,7 @@ impl ProverService {
             ..Default::default()
         };
 
-        let awaiter = topic.new_publisher(None).publish(message).await;
+        let awaiter = publisher.new_publisher(None).publish(message).await;
 
         awaiter
             .get()
@@ -272,7 +271,7 @@ impl ProverService {
 
         debug!(
             request_id = response.request_id,
-            "Result published to topic '{}'", result_topic
+            "Result published successfully"
         );
 
         Ok(())
