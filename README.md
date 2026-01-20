@@ -176,9 +176,7 @@ Then, navigate to the contracts directory and deploy using Foundry:
 
 ```bash
 cd contracts
-
-# Load environment variables from .env file
-source ../.env
+export $(grep -v '^#' ../.env | xargs)
 forge script script/Deploy.s.sol:DeployPicoVerifier \
     --rpc-url $RPC_URL \
     --broadcast \
