@@ -29,6 +29,7 @@ gcloud config set project [YOUR_PROJECT_ID]
 ```bash
 gcloud services enable pubsub.googleapis.com
 gcloud services enable compute.googleapis.com
+gcloud services enable artifactregistry.googleapis.com
 ```
 
 等待幾分鐘，直到以下回應出現：
@@ -39,14 +40,14 @@ Operation "operations/acf.p2-210193831987-0e03b4ff-f8ba-46cb-be76-f9adc4fed906" 
 
 ### 3. 建立 Service Account (SA)
 
-Prover Service 需要專用的身分來存取 Pub/Sub。
+Prover Service 需要專用的身分來存取 Pub/Sub 和 Artifact Registry。
 
 ```bash
 # 建立 Service Account
 gcloud iam service-accounts create prover-service-sa \
     --display-name="Prover Service Account"
 
-# 賦予權限 (Subscriber 接收任務, Publisher 發送結果)
+# 賦予權限
 gcloud projects add-iam-policy-binding [YOUR_PROJECT_ID] \
     --member="serviceAccount:prover-service-sa@[YOUR_PROJECT_ID].iam.gserviceaccount.com" \
     --role="roles/pubsub.subscriber"
@@ -54,6 +55,10 @@ gcloud projects add-iam-policy-binding [YOUR_PROJECT_ID] \
 gcloud projects add-iam-policy-binding [YOUR_PROJECT_ID] \
     --member="serviceAccount:prover-service-sa@[YOUR_PROJECT_ID].iam.gserviceaccount.com" \
     --role="roles/pubsub.publisher"
+
+gcloud projects add-iam-policy-binding [YOUR_PROJECT_ID] \
+    --member="serviceAccount:prover-service-sa@[YOUR_PROJECT_ID].iam.gserviceaccount.com" \
+    --role="roles/artifactregistry.reader"
 ```
 
 ### 4. 建立 Topics 與 Subscriptions
@@ -115,19 +120,31 @@ gcloud compute instances create prover-instance-1 \
 
 ## 步驟三：部署 Prover Service 到 VM
 
-### 1. 建置 Docker Image (在本機)
+### 1. 在本機建置 Docker Image
 
-使用 Docker 可避免在 VM 上安裝 Rust 編譯環境，專案根目錄已有 Dockerfile。
+#### A. 設定 GCR 認證
 
 ```bash
 gcloud auth configure-docker
+```
 
-# 建置 Image (請將 [YOUR_PROJECT_ID] 替換)
-docker build -t gcr.io/[YOUR_PROJECT_ID]/prover-service:latest .
+#### B. 建置 Image
 
-# 推送
+由於 VM 是 x86_64 架構，macOS (ARM64) 用戶需要指定目標平台：
+
+```bash
+docker build --platform linux/amd64 -t gcr.io/[YOUR_PROJECT_ID]/prover-service:latest .
+```
+
+需要大概 30-60 分鐘完成建置。
+
+#### C. 推送 Image
+
+```bash
 docker push gcr.io/[YOUR_PROJECT_ID]/prover-service:latest
 ```
+
+根據網速，需要大概 1 小時。
 
 ### 2. 在 VM 上運行
 
@@ -150,13 +167,15 @@ exit
 gcloud compute ssh prover-instance-1
 ```
 
-#### B. 設定認證並拉取 Image
+#### B. 設定 GCR 認證
 
 ```bash
 gcloud auth configure-docker
 ```
 
 #### C. 啟動服務
+
+`docker run` 會自動從 GCR 拉取 Image。
 
 使用環境變數設定正式環境參數。
 
@@ -166,14 +185,37 @@ gcloud auth configure-docker
 docker run -d \
   --name prover-service \
   --restart always \
+  --network host \                                  # allow the container to access GCE metadata service for authentication
+  -v /var/run/docker.sock:/var/run/docker.sock \    # the prover internally calls `docker run` to execute `pico_gnark_cli` for EVM proof 
   -e GCP_PROJECT_ID=[YOUR_PROJECT_ID] \
   -e PROVER_SUBSCRIPTION=prover-requests-sub \
   -e RESULT_TOPIC=prover-results \
+  -e OUTPUT_DIR=/app/data \
+  -e ELF_PATH=/app/app/elf/riscv32im-pico-zkvm-elf \
   -e MAX_CONCURRENT_PROOFS=2 \
   -e PROOF_TIMEOUT_SECS=3600 \
   -e RUST_LOG=info \
   gcr.io/[YOUR_PROJECT_ID]/prover-service:latest
 ```
+
+#### D. 設定認證（如遇到 PermissionDenied 錯誤）
+
+如果 Container 啟動後出現 `PermissionDenied` 錯誤，表示 Rust Pub/Sub client 無法正確使用 GCE metadata 認證。需要手動設定 Application Default Credentials (ADC)：
+
+```bash
+# 在 VM 上執行，會給你一個 URL
+gcloud auth application-default login --no-launch-browser
+```
+
+在**本機瀏覽器**打開該 URL，登入 Google 帳號後，將授權碼貼回 VM 終端機。
+
+完成後，關閉並刪除現有的 Prover Container：
+
+```bash
+docker stop prover-service && docker rm prover-service
+```
+
+接著透過[步驟 C.](#c-啟動服務) 的`docker run` 指令重新啟動 Container 並掛載認證檔案。
 
 ---
 
@@ -204,9 +246,48 @@ GCP_PROJECT_ID=[YOUR_PROJECT_ID]
 執行發布：
 
 ```bash
-npx tsx scripts/test-pubsub.ts publish normal
+export $(grep -v '^#' .env | xargs)
+npm run pubsub:publish normal
 ```
 
 ### 3. 確認結果
 
 回到 VM 的 log 視窗，您應該會看到它收到訊息並開始 `Processing proof request`。稍後，它會顯示 `Proof generated successfully` 並將結果發布回 `prover-results`。
+
+### 4. 接收 Proof 結果
+
+Prover Service 會將產生的 proof 發布到 `prover-results` Topic。以下是接收結果的方式：
+
+#### A. 使用 gcloud CLI（測試用）
+
+一次性拉取訊息：
+
+```bash
+gcloud pubsub subscriptions pull prover-results-sub --auto-ack
+```
+
+持續監聽（每秒輪詢）：
+
+```bash
+while true; do
+  gcloud pubsub subscriptions pull prover-results-sub --auto-ack --format="json"
+  sleep 1
+done
+```
+
+> **Note**: `--auto-ack` 會在拉取後自動確認訊息，訊息將從佇列中移除。若不加此參數，訊息會在 ack deadline 後重新出現。
+
+#### B. 使用專案內建腳本（推薦）
+
+專案已內建 TypeScript subscriber，可以持續監聽結果：
+
+```bash
+export $(grep -v '^#' .env | xargs)
+npm run pubsub:listen forever
+```
+
+收到成功的 proof 後，腳本會自動將結果儲存到 `prover/data/groth16-proof.json`，可直接用於鏈上驗證：
+
+```bash
+npm run verify
+```

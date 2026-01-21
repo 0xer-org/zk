@@ -28,8 +28,11 @@ impl ProverService {
     pub async fn new(config: Config, cached_elf: Arc<CachedElf>) -> Result<Self, ServiceError> {
         info!("Initializing Google Cloud Pub/Sub client");
 
-        // Create Pub/Sub client
-        let client_config = ClientConfig::default();
+        // Create Pub/Sub client with proper authentication (auto-detects GCE metadata, ADC, etc.)
+        let client_config = ClientConfig::default()
+            .with_auth()
+            .await
+            .map_err(|e| ServiceError::PubSub(format!("Failed to setup auth: {}", e)))?;
 
         let client = Client::new(client_config)
             .await
@@ -249,8 +252,13 @@ impl ProverService {
         result_topic: &str,
         response: &ProverResponse,
     ) -> Result<(), ServiceError> {
-        // Create fresh client to avoid stale connections after long proof generation
-        let client = Client::new(ClientConfig::default())
+        // Create fresh client with proper authentication
+        let client_config = ClientConfig::default()
+            .with_auth()
+            .await
+            .map_err(|e| ServiceError::PubSub(format!("Failed to setup auth: {}", e)))?;
+
+        let client = Client::new(client_config)
             .await
             .map_err(|e| ServiceError::PubSub(format!("Failed to create client: {}", e)))?;
 
