@@ -1,6 +1,7 @@
 # Prover
 
 This crate contains two binaries:
+
 - `prover` - A Pub/Sub service that processes proof generation requests
 - `setup` - A one-time setup script that generates Groth16 keys and verifier contract
 
@@ -20,6 +21,7 @@ Environment variables:
 | `OUTPUT_DIR` | Directory for output artifacts | `prover/data` |
 
 Generated files in `OUTPUT_DIR`:
+
 - `vm_pk` - Proving Key
 - `vm_vk` - Verification Key
 - `Groth16Verifier.sol` - Solidity verifier contract
