@@ -96,12 +96,17 @@ impl ProofGenerator {
 
         let dest_vm_pk = output_dir.join("vm_pk");
         let dest_vm_vk = output_dir.join("vm_vk");
-        std::fs::hard_link(&vm_pk_path, &dest_vm_pk).map_err(|e| {
-            ServiceError::ProofGeneration(format!("Failed to hard link vm_pk: {}", e))
-        })?;
-        std::fs::hard_link(&vm_vk_path, &dest_vm_vk).map_err(|e| {
-            ServiceError::ProofGeneration(format!("Failed to hard link vm_vk: {}", e))
-        })?;
+        // Try hard link first, fall back to copy if cross-filesystem or Docker overlay
+        if std::fs::hard_link(&vm_pk_path, &dest_vm_pk).is_err() {
+            std::fs::copy(&vm_pk_path, &dest_vm_pk).map_err(|e| {
+                ServiceError::ProofGeneration(format!("Failed to copy vm_pk: {}", e))
+            })?;
+        }
+        if std::fs::hard_link(&vm_vk_path, &dest_vm_vk).is_err() {
+            std::fs::copy(&vm_vk_path, &dest_vm_vk).map_err(|e| {
+                ServiceError::ProofGeneration(format!("Failed to copy vm_vk: {}", e))
+            })?;
+        }
 
         // Generate EVM proof (never run trusted setup)
         let prove_result = client
