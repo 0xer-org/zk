@@ -18,6 +18,7 @@ use tracing::{debug, error, info, warn};
 pub struct ProverService {
     config: Config,
     cached_elf: Arc<CachedElf>,
+    client: Client,
     subscription: Subscription,
     result_topic_path: String,
     semaphore: Arc<Semaphore>,
@@ -62,6 +63,7 @@ impl ProverService {
         Ok(Self {
             config,
             cached_elf,
+            client,
             subscription,
             result_topic_path,
             semaphore,
@@ -77,6 +79,7 @@ impl ProverService {
 
         let config = self.config.clone();
         let cached_elf = self.cached_elf.clone();
+        let client = self.client.clone();
         let result_topic_path = self.result_topic_path.clone();
         let semaphore = self.semaphore.clone();
 
@@ -86,21 +89,13 @@ impl ProverService {
                 move |message, _cancel| {
                     let config = config.clone();
                     let cached_elf = cached_elf.clone();
+                    let client = client.clone();
                     let result_topic_path = result_topic_path.clone();
                     let semaphore = semaphore.clone();
 
                     async move {
-                        // Try to acquire permit
-                        let permit = match semaphore.clone().try_acquire_owned() {
-                            Ok(p) => p,
-                            Err(_) => {
-                                warn!("Too many concurrent proofs, nacking message");
-                                if let Err(e) = message.nack().await {
-                                    error!("Failed to NACK message: {}", e);
-                                }
-                                return;
-                            }
-                        };
+                        // Wait for permit (blocks until capacity available)
+                        let permit = semaphore.clone().acquire_owned().await.unwrap();
 
                         let received_at = Utc::now();
                         let ack_id = message.ack_id().to_string();
@@ -111,7 +106,10 @@ impl ProverService {
                             drop(permit);
                             return;
                         }
-                        debug!(ack_id = ack_id, "Message ACKed immediately to prevent redelivery");
+                        debug!(
+                            ack_id = ack_id,
+                            "Message ACKed immediately to prevent redelivery"
+                        );
 
                         // Process the message (no retry on failure)
                         match Self::process_message(
@@ -125,7 +123,8 @@ impl ProverService {
                             Ok(response) => {
                                 // Publish result
                                 if let Err(e) =
-                                    Self::publish_result(&result_topic_path, &response).await
+                                    Self::publish_result(&client, &result_topic_path, &response)
+                                        .await
                                 {
                                     error!(
                                         request_id = response.request_id,
@@ -249,19 +248,10 @@ impl ProverService {
 
     /// Publish result to result topic
     async fn publish_result(
+        client: &Client,
         result_topic: &str,
         response: &ProverResponse,
     ) -> Result<(), ServiceError> {
-        // Create fresh client with proper authentication
-        let client_config = ClientConfig::default()
-            .with_auth()
-            .await
-            .map_err(|e| ServiceError::PubSub(format!("Failed to setup auth: {}", e)))?;
-
-        let client = Client::new(client_config)
-            .await
-            .map_err(|e| ServiceError::PubSub(format!("Failed to create client: {}", e)))?;
-
         let topic = client.topic(result_topic);
         let publisher = topic.new_publisher(None);
 

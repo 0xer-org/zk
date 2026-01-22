@@ -121,10 +121,11 @@ impl ProofGenerator {
             Err(e) => Err(e),
         };
 
+        // TODO: Re-enable cleanup after debugging
         // Always cleanup the request-specific output directory
-        if let Err(e) = std::fs::remove_dir_all(&output_dir) {
-            info!("Failed to cleanup output directory {}: {} (non-fatal)", output_dir.display(), e);
-        }
+        // if let Err(e) = std::fs::remove_dir_all(&output_dir) {
+        //     info!("Failed to cleanup output directory {}: {} (non-fatal)", output_dir.display(), e);
+        // }
 
         result
     }

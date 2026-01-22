@@ -1,10 +1,3 @@
----
-presentation:
-  theme: black.css
-  enableAppView: true
-  slideNumber: true
----
-
 # GCP Pub/Sub 與 Prover Service 部署指南
 
 本指南將協助您將目前的 Pub/Sub 架構與 Prover Service 正式部署至 Google Cloud Platform (GCP)。
@@ -158,9 +151,27 @@ gcloud compute ssh prover-instance-1
 
 #### A. 安裝 Docker
 
+使用官方 Docker repository 安裝最新版本（避免 Docker API 版本不相容問題）：
+
 ```bash
 sudo apt-get update
-sudo apt-get install -y docker.io
+sudo apt-get install -y ca-certificates curl gnupg
+
+# 新增 Docker 官方 GPG key
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+sudo chmod a+r /etc/apt/keyrings/docker.gpg
+
+# 新增 Docker repository
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+# 安裝 Docker
+sudo apt-get update
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io
+
 sudo usermod -aG docker $USER
 # 登出再登入以生效
 exit
@@ -173,20 +184,57 @@ gcloud compute ssh prover-instance-1
 gcloud auth configure-docker
 ```
 
-#### C. 啟動服務
+#### C. 準備 Host 目錄（Docker-in-Docker 必要步驟）
 
-`docker run` 會自動從 GCR 拉取 Image。
+Prover Service 內部會呼叫另一個 Docker container (`pico_gnark_cli`) 來生成 Groth16 proof。由於我們掛載了 Docker socket，內層 container 是由 Host 的 Docker daemon 執行的，因此需要在 Host 上準備共享目錄：
+
+```bash
+# 建立 Host 上的資料目錄
+sudo mkdir -p /app/data
+
+# 從 Image 中複製 Groth16 setup 檔案到 Host
+docker run --rm \
+  -v /app/data:/host-data \
+  gcr.io/[YOUR_PROJECT_ID]/prover-service:latest \
+  cp /app/data/vm_pk /app/data/vm_vk /host-data/
+
+# 確認檔案已複製（vm_pk 約 1.3GB，vm_vk 約 520 bytes）
+ls -la /app/data/
+```
+
+#### D. 設定 Application Default Credentials (ADC)
+
+有時 Container 啟動後出現 `PermissionDenied` 錯誤，表示 Rust Pub/Sub client 無法正確使用 GCE metadata 認證。為避免這種狀況，需要手動設定 Application Default Credentials (ADC)：
+
+```bash
+# 在 VM 上執行，會給你一個 URL
+gcloud auth application-default login --no-launch-browser
+```
+
+在本機瀏覽器打開該 URL，登入 Google 帳號後，將授權碼貼回 VM 終端機。
+這會在 VM 上的 `~/.config/gcloud/application_default_credentials.json` 產生 ADC 認證檔案。
+
+#### E. 啟動服務
 
 使用環境變數設定正式環境參數。
 
 * `MAX_CONCURRENT_PROOFS`: 根據您的 VM 規格調整 (c2-standard-8 建議設為 1 或 2)。
 
 ```bash
+# 抓取最新版 Image (如果有更新)
+docker pull gcr.io/[YOUR_PROJECT_ID]/prover-service:latest
+
+# 停止並移除舊的 Container（如果有的話）
+docker stop prover-service && docker rm prover-service
+
 docker run -d \
   --name prover-service \
   --restart always \
-  --network host \                                  # allow the container to access GCE metadata service for authentication
-  -v /var/run/docker.sock:/var/run/docker.sock \    # the prover internally calls `docker run` to execute `pico_gnark_cli` for EVM proof 
+  --network host \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v /app/data:/app/data \
+  -v ~/.config/gcloud/application_default_credentials.json:/app/credentials.json:ro \
+  -e GOOGLE_APPLICATION_CREDENTIALS=/app/credentials.json \
   -e GCP_PROJECT_ID=[YOUR_PROJECT_ID] \
   -e PROVER_SUBSCRIPTION=prover-requests-sub \
   -e RESULT_TOPIC=prover-results \
@@ -198,24 +246,11 @@ docker run -d \
   gcr.io/[YOUR_PROJECT_ID]/prover-service:latest
 ```
 
-#### D. 設定認證（如遇到 PermissionDenied 錯誤）
+**Note**：
 
-如果 Container 啟動後出現 `PermissionDenied` 錯誤，表示 Rust Pub/Sub client 無法正確使用 GCE metadata 認證。需要手動設定 Application Default Credentials (ADC)：
-
-```bash
-# 在 VM 上執行，會給你一個 URL
-gcloud auth application-default login --no-launch-browser
-```
-
-在**本機瀏覽器**打開該 URL，登入 Google 帳號後，將授權碼貼回 VM 終端機。
-
-完成後，關閉並刪除現有的 Prover Container：
-
-```bash
-docker stop prover-service && docker rm prover-service
-```
-
-接著透過[步驟 C.](#c-啟動服務) 的`docker run` 指令重新啟動 Container 並掛載認證檔案。
+* `-v /app/data:/app/data` 掛載 Host 資料目錄（Docker-in-Docker 必要），確保 Host 和 Container 使用相同路徑，讓 Docker daemon 能正確找到 Host 上的目錄和檔案。
+* `-v ~/.config/gcloud/application_default_credentials.json:/app/credentials.json:ro` 掛載 ADC 認證檔案
+* `-e GOOGLE_APPLICATION_CREDENTIALS=/app/credentials.json` 告訴 SDK 認證檔案位置
 
 ---
 
