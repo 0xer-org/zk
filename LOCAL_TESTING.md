@@ -58,7 +58,7 @@ docker run --rm \
   -e GCP_PROJECT_ID=test-project \
   -e PROVER_SUBSCRIPTION=prover-requests-sub \
   -e RESULT_TOPIC=prover-results \
-  -e OUTPUT_DIR=/app/data \
+  -e OUTPUT_DIR=[ABSOLUTE_PATH_TO_DATA] \
   -e ELF_PATH=/app/app/elf/riscv32im-pico-zkvm-elf \
   -e MAX_CONCURRENT_PROOFS=2 \
   -e RUST_LOG=info \
@@ -77,7 +77,7 @@ docker run --rm \
   -e GCP_PROJECT_ID=test-project \
   -e PROVER_SUBSCRIPTION=prover-requests-sub \
   -e RESULT_TOPIC=prover-results \
-  -e OUTPUT_DIR=/app/data \
+  -e OUTPUT_DIR=[ABSOLUTE_PATH_TO_DATA] \
   -e ELF_PATH=/app/app/elf/riscv32im-pico-zkvm-elf \
   -e MAX_CONCURRENT_PROOFS=2 \
   -e RUST_LOG=info \

@@ -25,7 +25,10 @@ COPY app/elf app/elf
 COPY prover/src prover/src
 COPY prover/data prover/data
 
-# Build the binary (only recompiles changed code)
+# Touch source files to force recompilation (COPY preserves timestamps)
+RUN touch lib/src/*.rs app/src/*.rs prover/src/*.rs
+
+# Build the binary
 RUN cargo build --release --bin prover
 
 FROM debian:bookworm-slim

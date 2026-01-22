@@ -184,7 +184,7 @@ gcloud compute ssh prover-instance-1
 gcloud auth configure-docker
 ```
 
-#### C. Prepare Host Directory (Required for Docker-in-Docker)
+#### C. Prepare Host Directory (First Time or When Setup Files Updated)
 
 The Prover Service internally calls another Docker container (`pico_gnark_cli`) to generate Groth16 proofs. Since we mount the Docker socket, the inner container is executed by the Host's Docker daemon, so we need to prepare shared directories on the Host:
 
@@ -192,7 +192,10 @@ The Prover Service internally calls another Docker container (`pico_gnark_cli`) 
 # Create data directory on Host
 sudo mkdir -p /app/data
 
-# Copy Groth16 setup files from Image to Host (if updating setup files)
+# Pull the latest Image
+docker pull gcr.io/[YOUR_PROJECT_ID]/prover-service:latest
+
+# Copy Groth16 setup files from Image to Host
 docker run --rm \
   -v /app/data:/host-data \
   gcr.io/[YOUR_PROJECT_ID]/prover-service:latest \
@@ -227,7 +230,7 @@ docker pull gcr.io/[YOUR_PROJECT_ID]/prover-service:latest
 # Manually stop and remove old Container (if exists)
 docker stop prover-service && docker rm prover-service
 
-docker run -d -rm \
+docker run -d \
   --name prover-service \
   --restart always \
   --network host \
