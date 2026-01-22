@@ -1,0 +1,33 @@
+# Build artifacts
+target/
+
+# Node.js
+node_modules/
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# IDE & tools
+.venv/
+.claude/
+.DS_Store
+
+# Docs (not needed for build)
+*.md
+Doc/
+
+# Contracts (Solidity, not needed for Rust build)
+contracts/
+
+# Scripts
+scripts/
+
+# Env files
+.env
+.env.example
+.todo
+tsconfig.json
+package.json
+package-lock.json
