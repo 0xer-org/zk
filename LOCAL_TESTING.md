@@ -17,10 +17,17 @@ docker stop pubsub-emulator && docker rm pubsub-emulator
 
 #### Terminal 2: Setup and Listen
 
+The `@google-cloud/pubsub` client uses `PUBSUB_EMULATOR_HOST` to determine where to connect:
+
+| `PUBSUB_EMULATOR_HOST` | Connection Target |
+|------------------------|-------------------|
+| **Set** (e.g., `localhost:8085`) | Local emulator |
+| **Not set** | GCP Cloud Pub/Sub |
+
 ```bash
 export PUBSUB_EMULATOR_HOST=localhost:8085
 npm run pubsub:setup
-npm run pubsub:listen
+npm run pubsub:listen  # Listens indefinitely by default (Ctrl+C to stop)
 ```
 
 #### Terminal 3: Run Prover (Docker)

@@ -223,13 +223,19 @@ Use environment variables to set production parameters.
 
 * `MAX_CONCURRENT_PROOFS`: Adjust based on your VM specifications (recommended 1 or 2 for c2-standard-8).
 
+If the image has been updated, pull the latest image.
+
 ```bash
-# Pull the latest Image (if updated)
 docker pull gcr.io/[YOUR_PROJECT_ID]/prover-service:latest
+```
 
-# Manually stop and remove old Container (if exists)
+If the service is already running, stop and remove the old container first.
+
+```bash
 docker stop prover-service && docker rm prover-service
+```
 
+```bash
 docker run -d \
   --name prover-service \
   --restart always \
@@ -273,7 +279,7 @@ You should see the message `Starting prover service, subscribing to 'prover-requ
 
 Run the test script on your local machine to send requests to the **real GCP Pub/Sub**.
 
-Modify `.env` (or ensure environment variables are set correctly):
+The `@google-cloud/pubsub` client uses `PUBSUB_EMULATOR_HOST` to determine where to connect. Make sure this variable is **NOT set** when connecting to GCP Cloud Pub/Sub:
 
 ```bash
 GCP_PROJECT_ID=[YOUR_PROJECT_ID]
@@ -294,34 +300,11 @@ Go back to the VM log window, you should see it receiving the message and starti
 
 ### 4. Receive Proof Results
 
-The Prover Service publishes generated proofs to the `prover-results` Topic. Here are ways to receive the results:
-
-#### A. Using gcloud CLI (for testing)
-
-Pull messages once:
-
-```bash
-gcloud pubsub subscriptions pull prover-results-sub --auto-ack
-```
-
-Continuous monitoring (polling every second):
-
-```bash
-while true; do
-  gcloud pubsub subscriptions pull prover-results-sub --auto-ack --format="json"
-  sleep 1
-done
-```
-
-> **Note**: `--auto-ack` automatically acknowledges messages after pulling, removing them from the queue. Without this parameter, messages will reappear after the ack deadline.
-
-#### B. Using Built-in Project Script (Recommended)
-
-The project includes a built-in TypeScript subscriber that can continuously listen for results:
+The Prover Service publishes generated proofs to the `prover-results` Topic. The project includes a built-in TypeScript subscriber that can continuously listen for results.
 
 ```bash
 export $(grep -v '^#' .env | xargs)
-npm run pubsub:listen forever
+npm run pubsub:listen  # Listens indefinitely by default
 ```
 
 After receiving a successful proof, the script will automatically save the result to `prover/data/groth16-proof.json`, which can be used directly for on-chain verification:

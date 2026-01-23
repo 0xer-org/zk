@@ -29,11 +29,21 @@ impl ProverService {
     pub async fn new(config: Config, cached_elf: Arc<CachedElf>) -> Result<Self, ServiceError> {
         info!("Initializing Google Cloud Pub/Sub client");
 
-        // Create Pub/Sub client with proper authentication (auto-detects GCE metadata, ADC, etc.)
-        let client_config = ClientConfig::default()
-            .with_auth()
-            .await
-            .map_err(|e| ServiceError::PubSub(format!("Failed to setup auth: {}", e)))?;
+        // Check if using emulator (skip auth in emulator mode)
+        let is_emulator = std::env::var("PUBSUB_EMULATOR_HOST").is_ok();
+        if is_emulator {
+            info!("Emulator mode detected, skipping authentication");
+        }
+
+        // Create Pub/Sub client (skip auth for emulator)
+        let client_config = if is_emulator {
+            ClientConfig::default()
+        } else {
+            ClientConfig::default()
+                .with_auth()
+                .await
+                .map_err(|e| ServiceError::PubSub(format!("Failed to setup auth: {}", e)))?
+        };
 
         let client = Client::new(client_config)
             .await
@@ -267,7 +277,7 @@ impl ProverService {
             .await
             .map_err(|e| ServiceError::PubSub(format!("Failed to publish: {}", e)))?;
 
-        debug!(
+        info!(
             request_id = response.request_id,
             "Result published successfully"
         );

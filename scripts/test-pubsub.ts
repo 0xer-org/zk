@@ -4,7 +4,7 @@
  * This script creates test topics/subscriptions and sends test messages to the prover service.
  */
 
-import { PubSub, Message } from "@google-cloud/pubsub";
+import { PubSub } from "@google-cloud/pubsub";
 import { writeFileSync, mkdirSync } from "fs";
 import { dirname } from "path";
 
@@ -227,55 +227,107 @@ async function publishTestMessage(
   return messageId;
 }
 
+interface PullResponse {
+  receivedMessages?: {
+    ackId: string;
+    message: {
+      data: string;
+      messageId: string;
+      publishTime: string;
+    };
+  }[];
+}
+
 async function listenForResults(
   timeout: number | null = 30
 ): Promise<ProverResult[]> {
-  const subscription = pubsub.subscription(RESULT_SUBSCRIPTION);
+  const emulatorHost = process.env.PUBSUB_EMULATOR_HOST;
+  const subscriptionPath = `projects/${PROJECT_ID}/subscriptions/${RESULT_SUBSCRIPTION}`;
 
   console.log(`\n📡 Listening for results on ${RESULT_SUBSCRIPTION}...`);
   console.log(
     `   Timeout: ${timeout === null ? "forever" : timeout + " seconds"}`
   );
+  console.log(
+    `   Mode: ${timeout === null ? "forever (Ctrl+C to stop)" : "polling"}`
+  );
 
   const results: ProverResult[] = [];
+  const startTime = Date.now();
+  let running = true;
 
-  const messageHandler = (message: Message): void => {
-    console.log(`\n✓ Received result message:`);
-    try {
-      const data = JSON.parse(message.data.toString()) as ProverResult;
-      console.log(JSON.stringify(data, null, 2));
-      results.push(data);
-
-      // Save successful proof to inputs.json for on-chain verification
-      if (data.status === "success" && data.proof_data) {
-        saveProofAsInputs(data.proof_data);
-      }
-    } catch (e) {
-      const err = e as Error;
-      console.log(`  Error parsing message: ${err.message}`);
-      console.log(`  Raw data: ${message.data}`);
-    }
-    message.ack();
-  };
-
-  subscription.on("message", messageHandler);
-
-  return new Promise((resolve) => {
-    if (timeout === null) {
-      console.log("   Mode: forever (Ctrl+C to stop)");
-      process.on("SIGINT", () => {
-        console.log("\n\n⛔ Stopped by user");
-        subscription.removeListener("message", messageHandler);
-        resolve(results);
-      });
-    } else {
-      setTimeout(() => {
-        console.log(`\n⏱ Timeout reached`);
-        subscription.removeListener("message", messageHandler);
-        resolve(results);
-      }, timeout * 1000);
-    }
+  // Handle Ctrl+C for graceful shutdown
+  process.once("SIGINT", () => {
+    console.log("\n\n⛔ Stopped by user");
+    running = false;
+    // Force exit after a short delay to allow cleanup
+    setTimeout(() => process.exit(0), 100);
   });
+
+  while (running) {
+    // Check timeout
+    if (timeout !== null && Date.now() - startTime > timeout * 1000) {
+      console.log(`\n⏱ Timeout reached`);
+      break;
+    }
+
+    try {
+      // Use REST API for pulling (more reliable with emulator)
+      const pullUrl = emulatorHost
+        ? `http://${emulatorHost}/v1/${subscriptionPath}:pull`
+        : `https://pubsub.googleapis.com/v1/${subscriptionPath}:pull`;
+
+      const pullResponse = await fetch(pullUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ maxMessages: 10 }),
+      });
+
+      if (!pullResponse.ok) {
+        throw new Error(`Pull failed: ${pullResponse.status}`);
+      }
+
+      const pullData = (await pullResponse.json()) as PullResponse;
+      const messages = pullData.receivedMessages || [];
+
+      for (const msg of messages) {
+        console.log(`\n✓ Received result message:`);
+        try {
+          const decoded = Buffer.from(msg.message.data, "base64").toString();
+          const data = JSON.parse(decoded) as ProverResult;
+          console.log(JSON.stringify(data, null, 2));
+          results.push(data);
+
+          // Save successful proof for on-chain verification
+          if (data.status === "success" && data.proof_data) {
+            saveProofAsInputs(data.proof_data);
+          }
+        } catch (e) {
+          const err = e as Error;
+          console.log(`  Error parsing message: ${err.message}`);
+          console.log(`  Raw data: ${msg.message.data}`);
+        }
+
+        // ACK the message
+        const ackUrl = emulatorHost
+          ? `http://${emulatorHost}/v1/${subscriptionPath}:acknowledge`
+          : `https://pubsub.googleapis.com/v1/${subscriptionPath}:acknowledge`;
+
+        await fetch(ackUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ackIds: [msg.ackId] }),
+        });
+      }
+    } catch {
+      // Ignore errors (e.g., no messages available)
+    }
+
+    // Small delay to avoid busy-waiting
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+
+  return results;
 }
 
 async function main(): Promise<void> {
