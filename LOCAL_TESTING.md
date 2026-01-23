@@ -19,15 +19,15 @@ docker stop pubsub-emulator && docker rm pubsub-emulator
 
 The `@google-cloud/pubsub` client uses `PUBSUB_EMULATOR_HOST` to determine where to connect:
 
-| `PUBSUB_EMULATOR_HOST` | Connection Target |
-|------------------------|-------------------|
-| **Set** (e.g., `localhost:8085`) | Local emulator |
-| **Not set** | GCP Cloud Pub/Sub |
+| `PUBSUB_EMULATOR_HOST`            | Connection Target |
+|-----------------------------------|-------------------|
+| **Set** (e.g., `localhost:8085`)  | Local emulator    |
+| **Not set**                       | GCP Cloud Pub/Sub |
 
 ```bash
 export PUBSUB_EMULATOR_HOST=localhost:8085
-npm run pubsub:setup
-npm run pubsub:listen  # Listens indefinitely by default (Ctrl+C to stop)
+npm run test:setup
+npm run test:listen  # Listens indefinitely by default (Ctrl+C to stop)
 ```
 
 #### Terminal 3: Run Prover (Docker)
@@ -95,20 +95,20 @@ docker run --rm \
 
 ```bash
 export PUBSUB_EMULATOR_HOST=localhost:8085
-npm run pubsub:publish normal         # Standard test (0.75 recaptcha, SMS & bio verified)
+npm run test:publish normal         # Standard test (0.75 recaptcha, SMS & bio verified)
 # or
-npm run pubsub:publish boundary       # Edge case (perfect recaptcha 1.0, all verified)
+npm run test:publish boundary       # Edge case (perfect recaptcha 1.0, all verified)
 # or
-npm run pubsub:publish invalid_json   # Malformed JSON for error handling
+npm run test:publish invalid_json   # Malformed JSON for error handling
 # or
-npm run pubsub:publish missing_fields # Missing `bio_verified` field
+npm run test:publish missing_fields # Missing `bio_verified` field
 ```
 
 ### Step 5: Verify Proof On-Chain
 
 After generating a proof, verify it on-chain using the deployed verifier contract.
 
-**Note**: The prover generates temporary files (e.g., `groth16-proof.json`, `Groth16Verifier.sol`) in a request-specific directory during proof generation. These files are automatically deleted after the proof data is read and sent via Pub/Sub. When `npm run pubsub:listen` receives a successful proof, it saves the proof to `prover/data/groth16-proof.json` in the format required for on-chain verification.
+**Note**: The prover generates temporary files (e.g., `groth16-proof.json`, `Groth16Verifier.sol`) in a request-specific directory during proof generation. These files are automatically deleted after the proof data is read and sent via Pub/Sub. When `npm run test:listen` receives a successful proof, it saves the proof to `prover/data/groth16-proof.json` in the format required for on-chain verification.
 
 To verify the proof on chain, set the `NETWORK` environment variable:
 
@@ -126,4 +126,4 @@ NETWORK=bsc npm run verify
 NETWORK=bsc-testnet npm run verify
 ```
 
-The script loads proof data from `prover/data/groth16-proof.json` (auto-saved by `pubsub:listen`) and calls `verifyPicoProof()` on the deployed PicoVerifier contract.
+The script loads proof data from `prover/data/groth16-proof.json` and calls `verifyPicoProof()` on the deployed PicoVerifier contract.

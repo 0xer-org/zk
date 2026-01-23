@@ -334,16 +334,12 @@ async function main(): Promise<void> {
   const args = process.argv.slice(2);
 
   if (args.length < 1) {
-    console.log("Usage:");
-    console.log(
-      "  npx tsx scripts/test-pubsub.ts setup          # Create topics and subscriptions"
-    );
-    console.log(
-      "  npx tsx scripts/test-pubsub.ts publish <scenario>  # Publish test message"
-    );
-    console.log(
-      "  npx tsx scripts/test-pubsub.ts listen         # Listen for results"
-    );
+    console.log("Usage: npm run <command>");
+    console.log("");
+    console.log("Commands:");
+    console.log("  test:setup               # Create topics and subscriptions");
+    console.log("  test:publish <scenario>  # Publish test message");
+    console.log("  test:listen [timeout]    # Listen for results");
     console.log("\nScenarios: normal, boundary, invalid_json, missing_fields");
     console.log("\nEnvironment variables:");
     console.log(

@@ -5,9 +5,11 @@
   "type": "module",
   "scripts": {
     "verify": "tsx scripts/verify-proof.ts",
-    "pubsub:setup": "tsx scripts/test-pubsub.ts setup",
-    "pubsub:listen": "tsx scripts/test-pubsub.ts listen",
-    "pubsub:publish": "tsx scripts/test-pubsub.ts publish"
+    "test:setup": "tsx scripts/test-pubsub.ts setup",
+    "test:listen": "tsx scripts/test-pubsub.ts listen",
+    "test:publish": "tsx scripts/test-pubsub.ts publish",
+    "gcp:publish": "tsx scripts/gcp-pubsub.ts publish",
+    "gcp:listen": "tsx scripts/gcp-pubsub.ts listen"
   },
   "dependencies": {
     "@google-cloud/pubsub": "^5.2.2",

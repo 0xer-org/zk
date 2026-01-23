@@ -223,12 +223,6 @@ Use environment variables to set production parameters.
 
 * `MAX_CONCURRENT_PROOFS`: Adjust based on your VM specifications (recommended 1 or 2 for c2-standard-8).
 
-If the image has been updated, pull the latest image.
-
-```bash
-docker pull gcr.io/[YOUR_PROJECT_ID]/prover-service:latest
-```
-
 If the service is already running, stop and remove the old container first.
 
 ```bash
@@ -279,19 +273,17 @@ You should see the message `Starting prover service, subscribing to 'prover-requ
 
 Run the test script on your local machine to send requests to the **real GCP Pub/Sub**.
 
-The `@google-cloud/pubsub` client uses `PUBSUB_EMULATOR_HOST` to determine where to connect. Make sure this variable is **NOT set** when connecting to GCP Cloud Pub/Sub:
+First, ensure your `.env` has the correct GCP project ID:
 
 ```bash
 GCP_PROJECT_ID=[YOUR_PROJECT_ID]
-# Ensure this line is commented out
-# PUBSUB_EMULATOR_HOST=localhost:8085
 ```
 
-Execute publish:
+Then publish a test message:
 
 ```bash
 export $(grep -v '^#' .env | xargs)
-npm run pubsub:publish normal
+npm run gcp:publish normal
 ```
 
 ### 3. Verify Results
@@ -304,7 +296,7 @@ The Prover Service publishes generated proofs to the `prover-results` Topic. The
 
 ```bash
 export $(grep -v '^#' .env | xargs)
-npm run pubsub:listen  # Listens indefinitely by default
+npm run gcp:listen  # Listens indefinitely by default
 ```
 
 After receiving a successful proof, the script will automatically save the result to `prover/data/groth16-proof.json`, which can be used directly for on-chain verification:
