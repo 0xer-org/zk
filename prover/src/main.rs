@@ -52,9 +52,9 @@ async fn main() -> Result<(), ServiceError> {
 
     // Spawn shutdown handler
     tokio::spawn(async move {
-        signal::ctrl_c()
-            .await
-            .expect("Failed to listen for shutdown signal");
+        if let Err(e) = signal::ctrl_c().await {
+            error!("Failed to listen for shutdown signal: {}", e);
+        }
         info!("Shutdown signal received, stopping service...");
         shutdown_token.cancel();
     });
