@@ -101,6 +101,14 @@ impl Config {
             ));
         }
 
+        // Validate ELF file exists
+        if !std::path::Path::new(&self.elf_path).exists() {
+            return Err(ServiceError::Config(format!(
+                "ELF file not found at: {}",
+                self.elf_path
+            )));
+        }
+
         Ok(())
     }
 }

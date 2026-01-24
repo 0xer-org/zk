@@ -38,8 +38,18 @@ async fn main() -> Result<(), ServiceError> {
     info!("ELF file loaded and cached successfully");
 
     // Create output directory if it doesn't exist
-    std::fs::create_dir_all(&config.output_dir)
-        .map_err(|e| ServiceError::Io(e))?;
+    std::fs::create_dir_all(&config.output_dir)?;
+
+    // Validate output directory is writable
+    let test_file = format!("{}/.write_test", config.output_dir);
+    std::fs::write(&test_file, "test").map_err(|e| {
+        error!("Output directory not writable: {}", e);
+        ServiceError::Config(format!(
+            "Output directory '{}' is not writable: {}",
+            config.output_dir, e
+        ))
+    })?;
+    std::fs::remove_file(&test_file).ok();
     info!("Output directory ready: {}", config.output_dir);
 
     // Initialize prover service
