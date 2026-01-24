@@ -60,6 +60,27 @@ The prover can run as a cloud-native microservice using Google Cloud Pub/Sub:
 └─────────────────┘
 ```
 
+### Important: Message Loss Risk
+
+**Warning**: The prover service uses an "immediate ACK" strategy for reliability:
+
+- Messages are acknowledged **immediately upon receipt**, before proof generation begins
+- If the service crashes during proof generation, that request is **permanently lost**
+- Failed proofs are **not automatically retried** by Pub/Sub
+
+This design is intentional because:
+
+1. Proof generation can take 30+ minutes
+2. Pub/Sub's maximum ACK deadline (600s) is insufficient
+3. Preventing duplicate proof generation saves computational resources
+
+**Recommended Client-Side Retry Strategy**:
+
+1. Implement a timeout for expected proof completion (e.g., 60 minutes)
+2. Listen on the results topic for success/failure responses
+3. If no response is received within the timeout, republish the request with a new `request_id`
+4. Track `request_id` to correlate requests with responses
+
 ### Formula
 
 ```bash
