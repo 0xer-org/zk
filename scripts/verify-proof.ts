@@ -42,8 +42,14 @@ const NETWORK_NAMES: Record<string, string> = {
 const networkName = NETWORK_NAMES[NETWORK] || NETWORK;
 
 async function main() {
-  // Read the Groth16 proof from the JSON file
-  const proofPath = 'prover/data/groth16-proof.json';
+  // Read the Groth16 proof from the JSON file (path from argument or default)
+  const proofPath = process.argv[2];
+  if (!proofPath) {
+    console.error('❌ Error: No proof path specified');
+    console.error('Usage: npm run verify <proof-path>');
+    console.error('Example: npm run verify prover/data/proofs/test-normal-1737654321.json');
+    process.exit(1);
+  }
   const inputsData = JSON.parse(readFileSync(proofPath, 'utf-8'));
 
   console.log('📄 Loaded proof data from:', proofPath);

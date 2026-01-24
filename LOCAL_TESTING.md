@@ -26,7 +26,7 @@ The `@google-cloud/pubsub` client uses `PUBSUB_EMULATOR_HOST` to determine where
 
 ```bash
 export PUBSUB_EMULATOR_HOST=localhost:8085
-npm run test:setup
+npm run test:setup   # Only needed after starting/restarting emulator
 npm run test:listen  # Listens indefinitely by default (Ctrl+C to stop)
 ```
 
@@ -108,22 +108,18 @@ npm run test:publish missing_fields # Missing `bio_verified` field
 
 After generating a proof, verify it on-chain using the deployed verifier contract.
 
-**Note**: The prover generates temporary files (e.g., `groth16-proof.json`, `Groth16Verifier.sol`) in a request-specific directory during proof generation. These files are automatically deleted after the proof data is read and sent via Pub/Sub. When `npm run test:listen` receives a successful proof, it saves the proof to `prover/data/groth16-proof.json` in the format required for on-chain verification.
+**Note**: The prover generates temporary files (e.g., `groth16-proof.json`, `Groth16Verifier.sol`) in a request-specific directory during proof generation. These files are automatically deleted after the proof data is read and sent via Pub/Sub. When `npm run test:listen` receives a successful proof, it saves the proof to `prover/data/proofs/<request_id>.json` (e.g., `prover/data/proofs/test-normal-1737654321.json`).
 
-To verify the proof on chain, set the `NETWORK` environment variable:
+To verify the proof on chain, provide the proof path and optionally set the `NETWORK` environment variable:
 
 ```bash
-# Ethereum Mainnet
-NETWORK=mainnet npm run verify
-
 # Ethereum Sepolia (default)
-NETWORK=sepolia npm run verify
+npm run verify prover/data/proofs/test-normal-1737654321.json
 
-# BSC Mainnet
-NETWORK=bsc npm run verify
-
-# BSC Testnet
-NETWORK=bsc-testnet npm run verify
+# Other networks
+NETWORK=mainnet npm run verify prover/data/proofs/test-normal-1737654321.json
+NETWORK=bsc npm run verify prover/data/proofs/test-normal-1737654321.json
+NETWORK=bsc-testnet npm run verify prover/data/proofs/test-normal-1737654321.json
 ```
 
-The script loads proof data from `prover/data/groth16-proof.json` and calls `verifyPicoProof()` on the deployed PicoVerifier contract.
+The script loads proof data from the specified path and calls `verifyPicoProof()` on the deployed PicoVerifier contract.

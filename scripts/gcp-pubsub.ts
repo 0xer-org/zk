@@ -6,7 +6,6 @@
 
 import { PubSub, Message } from "@google-cloud/pubsub";
 import { writeFileSync, mkdirSync } from "fs";
-import { dirname } from "path";
 
 // Configuration
 const PROJECT_ID = process.env.GCP_PROJECT_ID || "test-project";
@@ -53,19 +52,20 @@ interface ProverResult {
   metrics?: unknown;
 }
 
-const GROTH16_PROOF_PATH = "prover/data/groth16-proof.json";
+const PROOFS_DIR = "prover/data/proofs";
 
-function saveProofAsInputs(proofData: ProofData): void {
+function saveProofAsInputs(proofData: ProofData, requestId: string): void {
   const proof = JSON.parse(Buffer.from(proofData.proof, "base64").toString());
   const publicValues = Buffer.from(proofData.public_inputs, "base64").toString();
   const riscvVKey = Buffer.from(proofData.verification_key, "base64").toString();
 
   const inputs = { proof, publicValues, riscvVKey };
 
-  mkdirSync(dirname(GROTH16_PROOF_PATH), { recursive: true });
-  writeFileSync(GROTH16_PROOF_PATH, JSON.stringify(inputs, null, 2));
-  console.log(`\n💾 Saved proof to ${GROTH16_PROOF_PATH}`);
-  console.log(`   Run 'npm run verify' to verify on-chain`);
+  mkdirSync(PROOFS_DIR, { recursive: true });
+  const proofPath = `${PROOFS_DIR}/${requestId}.json`;
+  writeFileSync(proofPath, JSON.stringify(inputs, null, 2));
+  console.log(`\n💾 Saved proof to ${proofPath}`);
+  console.log(`   Run 'npm run verify ${proofPath}' to verify on-chain`);
 }
 
 function createTestMessage(requestId: string, scenario: Scenario): string {
@@ -183,7 +183,7 @@ async function listenForResults(
         results.push(data);
 
         if (data.status === "success" && data.proof_data) {
-          saveProofAsInputs(data.proof_data);
+          saveProofAsInputs(data.proof_data, data.request_id);
         }
       } catch (e) {
         const err = e as Error;

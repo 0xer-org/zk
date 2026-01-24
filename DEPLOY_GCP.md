@@ -299,8 +299,8 @@ export $(grep -v '^#' .env | xargs)
 npm run gcp:listen  # Listens indefinitely by default
 ```
 
-After receiving a successful proof, the script will automatically save the result to `prover/data/groth16-proof.json`, which can be used directly for on-chain verification:
+After receiving a successful proof, the script will automatically save the result to `prover/data/proofs/<request_id>.json` (e.g., `prover/data/proofs/test-normal-1737654321.json`), which can be used directly for on-chain verification:
 
 ```bash
-npm run verify
+npm run verify prover/data/proofs/test-normal-1737654321.json
 ```
