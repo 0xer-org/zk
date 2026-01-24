@@ -26,6 +26,7 @@ Generated files in `OUTPUT_DIR`:
 - `vm_vk` - Verification Key
 - `Groth16Verifier.sol` - Solidity verifier contract
 - `inputs.json` - Test proof data
+- `proofs/` - Directory containing generated proofs from test runs (organized by request ID)
 
 ## Prover Service
 

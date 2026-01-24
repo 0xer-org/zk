@@ -42,8 +42,20 @@ const NETWORK_NAMES: Record<string, string> = {
 const networkName = NETWORK_NAMES[NETWORK] || NETWORK;
 
 async function main() {
+  // Get proof file from command line argument or use default
+  const args = process.argv.slice(2);
+  let proofPath: string;
+
+  if (args.length > 0) {
+    // If argument is provided, try to load from proofs directory
+    const requestId = args[0];
+    proofPath = `prover/data/proofs/${requestId}.json`;
+  } else {
+    // Default to latest proof for backwards compatibility
+    proofPath = 'prover/data/groth16-proof.json';
+  }
+
   // Read the Groth16 proof from the JSON file
-  const proofPath = 'prover/data/groth16-proof.json';
   const inputsData = JSON.parse(readFileSync(proofPath, 'utf-8'));
 
   console.log('📄 Loaded proof data from:', proofPath);

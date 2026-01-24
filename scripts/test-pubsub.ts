@@ -59,9 +59,9 @@ interface ProverResult {
   metrics?: unknown;
 }
 
-const GROTH16_PROOF_PATH = "prover/data/groth16-proof.json";
+const PROOFS_DIR = "prover/data/proofs";
 
-function saveProofAsInputs(proofData: ProofData): void {
+function saveProofAsInputs(proofData: ProofData, requestId: string): void {
   // Decode base64 to get original values
   const proof = JSON.parse(Buffer.from(proofData.proof, "base64").toString());
   const publicValues = Buffer.from(proofData.public_inputs, "base64").toString();
@@ -73,10 +73,20 @@ function saveProofAsInputs(proofData: ProofData): void {
     riscvVKey,
   };
 
-  mkdirSync(dirname(GROTH16_PROOF_PATH), { recursive: true });
-  writeFileSync(GROTH16_PROOF_PATH, JSON.stringify(inputs, null, 2));
-  console.log(`\n💾 Saved proof to ${GROTH16_PROOF_PATH}`);
-  console.log(`   Run 'npm run verify' to verify on-chain`);
+  // Create proofs directory if it doesn't exist
+  mkdirSync(PROOFS_DIR, { recursive: true });
+
+  // Save with request ID in filename
+  const proofPath = `${PROOFS_DIR}/${requestId}.json`;
+  writeFileSync(proofPath, JSON.stringify(inputs, null, 2));
+  console.log(`\n💾 Saved proof to ${proofPath}`);
+  console.log(`   Run 'npm run verify ${requestId}' to verify on-chain`);
+
+  // Also save as latest for backwards compatibility
+  const latestPath = "prover/data/groth16-proof.json";
+  mkdirSync(dirname(latestPath), { recursive: true });
+  writeFileSync(latestPath, JSON.stringify(inputs, null, 2));
+  console.log(`   Also saved as ${latestPath} (for compatibility)`);
 }
 
 async function createTopicsAndSubscriptions(): Promise<void> {
@@ -300,7 +310,7 @@ async function listenForResults(
 
           // Save successful proof for on-chain verification
           if (data.status === "success" && data.proof_data) {
-            saveProofAsInputs(data.proof_data);
+            saveProofAsInputs(data.proof_data, data.request_id);
           }
         } catch (e) {
           const err = e as Error;

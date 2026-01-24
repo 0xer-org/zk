@@ -108,22 +108,36 @@ npm run test:publish missing_fields # Missing `bio_verified` field
 
 After generating a proof, verify it on-chain using the deployed verifier contract.
 
-**Note**: The prover generates temporary files (e.g., `groth16-proof.json`, `Groth16Verifier.sol`) in a request-specific directory during proof generation. These files are automatically deleted after the proof data is read and sent via Pub/Sub. When `npm run test:listen` receives a successful proof, it saves the proof to `prover/data/groth16-proof.json` in the format required for on-chain verification.
+**Note**: The prover generates temporary files (e.g., `groth16-proof.json`, `Groth16Verifier.sol`) in a request-specific directory during proof generation. These files are automatically deleted after the proof data is read and sent via Pub/Sub.
 
-To verify the proof on chain, set the `NETWORK` environment variable:
+When `npm run test:listen` receives a successful proof, it saves the proof in two locations:
+1. `prover/data/proofs/{request-id}.json` - Organized by request ID for tracking multiple test runs
+2. `prover/data/groth16-proof.json` - Latest proof (for backwards compatibility)
+
+To verify a specific proof on chain:
+
+```bash
+# Verify a specific proof by request ID
+npm run verify test-normal-1769197180
+
+# Or verify the latest proof (default)
+npm run verify
+```
+
+You can also specify the network using the `NETWORK` environment variable:
 
 ```bash
 # Ethereum Mainnet
-NETWORK=mainnet npm run verify
+NETWORK=mainnet npm run verify test-normal-1769197180
 
 # Ethereum Sepolia (default)
-NETWORK=sepolia npm run verify
+NETWORK=sepolia npm run verify test-normal-1769197180
 
 # BSC Mainnet
-NETWORK=bsc npm run verify
+NETWORK=bsc npm run verify test-normal-1769197180
 
 # BSC Testnet
-NETWORK=bsc-testnet npm run verify
+NETWORK=bsc-testnet npm run verify test-normal-1769197180
 ```
 
-The script loads proof data from `prover/data/groth16-proof.json` and calls `verifyPicoProof()` on the deployed PicoVerifier contract.
+The script calls `verifyPicoProof()` on the deployed PicoVerifier contract with the proof data.
