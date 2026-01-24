@@ -2,6 +2,25 @@
 /**
  * Test script for sending messages to Pub/Sub emulator.
  * This script creates test topics/subscriptions and sends test messages to the prover service.
+ *
+ * Example: Auto-verify proofs after receiving them
+ *
+ * ```typescript
+ * import { verifyProof, loadProofFromFile } from './verify-proof';
+ *
+ * // After saving proof, verify it programmatically:
+ * const proofData = loadProofFromFile(requestId);
+ * const result = await verifyProof(proofData, {
+ *   network: 'sepolia',
+ *   verbose: false
+ * });
+ *
+ * if (result.success) {
+ *   console.log(`✅ Proof ${requestId} verified on ${result.network}`);
+ * } else {
+ *   console.log(`❌ Verification failed: ${result.error}`);
+ * }
+ * ```
  */
 
 import { PubSub } from "@google-cloud/pubsub";

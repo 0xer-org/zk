@@ -221,6 +221,62 @@ BSC_TESTNET_VERIFIER=0x...    # For BSC Testnet deployment
 To deploy the Pub/Sub prover service to GCP and test it, follow the instructions in [DEPLOY_GCP.md](DEPLOY_GCP.md).
 Alternatively, you can follow the instructions in [LOCAL_TESTING.md](LOCAL_TESTING.md) to run the prover service locally using the Pub/Sub emulator.
 
+## Programmatic Verification
+
+The `verify-proof.ts` script exports reusable functions that can be integrated into other scripts:
+
+```typescript
+import { verifyProof, loadProofFromFile, ProofInputs } from './scripts/verify-proof';
+
+// Method 1: Load and verify from file
+const proofData = loadProofFromFile('test-normal-1769197180');
+const result = await verifyProof(proofData, {
+  network: 'sepolia',
+  verbose: false  // Disable console output
+});
+
+if (result.success) {
+  console.log(`✅ Verified on ${result.network}`);
+} else {
+  console.log(`❌ Failed: ${result.error}`);
+}
+
+// Method 2: Verify with custom proof data
+const customProof: ProofInputs = {
+  riscvVKey: '0x...',
+  publicValues: '0x...',
+  proof: [/* proof array */]
+};
+
+const customResult = await verifyProof(customProof, { network: 'bsc' });
+```
+
+### Available Functions
+
+- `loadProofFromFile(requestId?: string): ProofInputs` - Load proof from file system
+- `verifyProof(proofData: ProofInputs, options?: VerifyOptions): Promise<VerifyResult>` - Verify proof on-chain
+
+### Types
+
+```typescript
+interface ProofInputs {
+  riscvVKey: string;
+  publicValues: string;
+  proof: number[];
+}
+
+interface VerifyOptions {
+  network?: string;    // Default: 'sepolia'
+  verbose?: boolean;   // Default: true
+}
+
+interface VerifyResult {
+  success: boolean;
+  error?: string;
+  network: string;
+}
+```
+
 ## References
 
 - [Pico Documentation](https://pico-docs.brevis.network/)

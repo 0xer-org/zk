@@ -10,27 +10,6 @@ const PICO_VERIFIER_ABI = [
   "function verifyPicoProof(bytes32 riscvVkey, bytes calldata publicValues, uint256[8] calldata proof) external view"
 ];
 
-// Network configuration
-const NETWORK = process.env.NETWORK || 'sepolia';
-
-// Get verifier address based on network
-const VERIFIER_ADDRESS = process.env[`${NETWORK.toUpperCase().replace(/-/g, '_')}_VERIFIER`];
-
-if (!VERIFIER_ADDRESS) {
-  console.error(`❌ Error: ${NETWORK.toUpperCase().replace(/-/g, '_')}_VERIFIER not found in .env file`);
-  console.error('Please copy .env.example to .env and fill in your verifier contract address');
-  process.exit(1);
-}
-
-// Get RPC URL based on network
-const RPC_URL = process.env[`${NETWORK.toUpperCase().replace(/-/g, '_')}_RPC_URL`];
-
-if (!RPC_URL) {
-  console.error(`❌ Error: ${NETWORK.toUpperCase().replace(/-/g, '_')}_RPC_URL not found in .env file`);
-  console.error('Please copy .env.example to .env and fill in your RPC URL');
-  process.exit(1);
-}
-
 // Network display names
 const NETWORK_NAMES: Record<string, string> = {
   'mainnet': 'Ethereum Mainnet',
@@ -39,71 +18,164 @@ const NETWORK_NAMES: Record<string, string> = {
   'bsc-testnet': 'BSC Testnet'
 };
 
-const networkName = NETWORK_NAMES[NETWORK] || NETWORK;
+export interface ProofInputs {
+  riscvVKey: string;
+  publicValues: string;
+  proof: number[];
+}
 
-async function main() {
-  // Get proof file from command line argument or use default
-  const args = process.argv.slice(2);
-  let proofPath: string;
+export interface VerifyOptions {
+  network?: string;
+  verbose?: boolean;
+}
 
-  if (args.length > 0) {
-    // If argument is provided, try to load from proofs directory
-    const requestId = args[0];
-    proofPath = `prover/data/proofs/${requestId}.json`;
-  } else {
-    // Default to latest proof for backwards compatibility
-    proofPath = 'prover/data/groth16-proof.json';
+export interface VerifyResult {
+  success: boolean;
+  error?: string;
+  network: string;
+}
+
+/**
+ * Verify a proof on-chain using the deployed PicoVerifier contract
+ * @param proofData - The proof data to verify
+ * @param options - Verification options (network, verbose logging)
+ * @returns Result of the verification
+ */
+export async function verifyProof(
+  proofData: ProofInputs,
+  options: VerifyOptions = {}
+): Promise<VerifyResult> {
+  const { network = 'sepolia', verbose = true } = options;
+
+  // Get verifier address based on network
+  const verifierAddress = process.env[`${network.toUpperCase().replace(/-/g, '_')}_VERIFIER`];
+
+  if (!verifierAddress) {
+    const error = `${network.toUpperCase().replace(/-/g, '_')}_VERIFIER not found in .env file`;
+    if (verbose) {
+      console.error(`❌ Error: ${error}`);
+      console.error('Please copy .env.example to .env and fill in your verifier contract address');
+    }
+    return { success: false, error, network };
   }
 
-  // Read the Groth16 proof from the JSON file
-  const inputsData = JSON.parse(readFileSync(proofPath, 'utf-8'));
+  // Get RPC URL based on network
+  const rpcUrl = process.env[`${network.toUpperCase().replace(/-/g, '_')}_RPC_URL`];
 
-  console.log('📄 Loaded proof data from:', proofPath);
-  console.log('📍 Contract address:', VERIFIER_ADDRESS);
-  console.log('🔗 Network:', networkName, `(${NETWORK})\n`);
+  if (!rpcUrl) {
+    const error = `${network.toUpperCase().replace(/-/g, '_')}_RPC_URL not found in .env file`;
+    if (verbose) {
+      console.error(`❌ Error: ${error}`);
+      console.error('Please copy .env.example to .env and fill in your RPC URL');
+    }
+    return { success: false, error, network };
+  }
 
-  // Extract data from inputs.json
-  const riscvVkey = inputsData.riscvVKey;
-  const publicValues = inputsData.publicValues;
-  const proof = inputsData.proof;
+  const networkName = NETWORK_NAMES[network] || network;
 
-  console.log('📊 Proof Data:');
-  console.log('  riscvVKey:', riscvVkey);
-  console.log('  publicValues:', publicValues);
-  console.log('  proof:', proof);
-  console.log();
+  if (verbose) {
+    console.log('📍 Contract address:', verifierAddress);
+    console.log('🔗 Network:', networkName, `(${network})\n`);
+    console.log('📊 Proof Data:');
+    console.log('  riscvVKey:', proofData.riscvVKey);
+    console.log('  publicValues:', proofData.publicValues);
+    console.log('  proof:', proofData.proof);
+    console.log();
+  }
 
   // Connect to the specified network
-  const provider = new ethers.JsonRpcProvider(RPC_URL);
+  const provider = new ethers.JsonRpcProvider(rpcUrl);
 
   // Create contract instance
   const contract = new ethers.Contract(
-    VERIFIER_ADDRESS as string,
+    verifierAddress,
     PICO_VERIFIER_ABI,
     provider
   );
 
   try {
-    console.log('🔍 Verifying proof on-chain...');
-
-    // Call verifyPicoProof (it's a view function, so no gas needed)
-    await contract.verifyPicoProof(riscvVkey, publicValues, proof);
-
-    console.log('✅ Proof verification SUCCEEDED!');
-    console.log(`🎉 Your zero-knowledge proof is valid on ${networkName}.`);
-  } catch (error: any) {
-    console.log('❌ Proof verification FAILED!');
-    console.error('Error:', error.message);
-
-    if (error.data) {
-      console.error('Error data:', error.data);
+    if (verbose) {
+      console.log('🔍 Verifying proof on-chain...');
     }
 
+    // Call verifyPicoProof (it's a view function, so no gas needed)
+    await contract.verifyPicoProof(
+      proofData.riscvVKey,
+      proofData.publicValues,
+      proofData.proof
+    );
+
+    if (verbose) {
+      console.log('✅ Proof verification SUCCEEDED!');
+      console.log(`🎉 Your zero-knowledge proof is valid on ${networkName}.`);
+    }
+
+    return { success: true, network: networkName };
+  } catch (error: any) {
+    if (verbose) {
+      console.log('❌ Proof verification FAILED!');
+      console.error('Error:', error.message);
+      if (error.data) {
+        console.error('Error data:', error.data);
+      }
+    }
+
+    return {
+      success: false,
+      error: error.message,
+      network: networkName
+    };
+  }
+}
+
+/**
+ * Load proof data from a file
+ * @param requestId - Optional request ID. If not provided, loads the latest proof
+ * @returns Proof data
+ */
+export function loadProofFromFile(requestId?: string): ProofInputs {
+  let proofPath: string;
+
+  if (requestId) {
+    proofPath = `prover/data/proofs/${requestId}.json`;
+  } else {
+    proofPath = 'prover/data/groth16-proof.json';
+  }
+
+  const inputsData = JSON.parse(readFileSync(proofPath, 'utf-8'));
+  return inputsData as ProofInputs;
+}
+
+/**
+ * CLI entry point
+ * Usage: npm run verify [request-id]
+ */
+async function main() {
+  const args = process.argv.slice(2);
+  const requestId = args.length > 0 ? args[0] : undefined;
+  const network = process.env.NETWORK || 'sepolia';
+
+  // Load proof from file
+  const proofPath = requestId
+    ? `prover/data/proofs/${requestId}.json`
+    : 'prover/data/groth16-proof.json';
+
+  console.log('📄 Loaded proof data from:', proofPath);
+
+  const proofData = loadProofFromFile(requestId);
+
+  // Verify proof on-chain
+  const result = await verifyProof(proofData, { network, verbose: true });
+
+  if (!result.success) {
     process.exit(1);
   }
 }
 
-main().catch((error) => {
-  console.error('Fatal error:', error);
-  process.exit(1);
-});
+// Only run main if this file is executed directly
+if (require.main === module) {
+  main().catch((error) => {
+    console.error('Fatal error:', error);
+    process.exit(1);
+  });
+}
