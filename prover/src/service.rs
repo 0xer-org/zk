@@ -105,7 +105,13 @@ impl ProverService {
 
                     async move {
                         // Wait for permit (blocks until capacity available)
-                        let permit = semaphore.clone().acquire_owned().await.unwrap();
+                        let permit = match semaphore.clone().acquire_owned().await {
+                            Ok(permit) => permit,
+                            Err(e) => {
+                                error!("Semaphore closed, cannot acquire permit: {}", e);
+                                return;
+                            }
+                        };
 
                         let received_at = Utc::now();
                         let ack_id = message.ack_id().to_string();
